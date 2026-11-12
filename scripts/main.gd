@@ -4,14 +4,22 @@ const VirtualJoystickScript = preload("res://scripts/virtual_joystick.gd")
 
 var player: CharacterBody3D
 var menu_layer: CanvasLayer
+var hud_layer: CanvasLayer
+var ui_root: Control
+
 var world_started := false
 var current_mode := "sandbox"
-var ui_root: Control
+
 
 func _ready() -> void:
 	_setup_input()
 	_setup_world()
 	_show_main_menu()
+
+
+# --------------------------------------------------
+# INPUT
+# --------------------------------------------------
 
 func _setup_input() -> void:
 	_add_key_action("move_forward", KEY_W)
@@ -19,6 +27,7 @@ func _setup_input() -> void:
 	_add_key_action("move_left", KEY_A)
 	_add_key_action("move_right", KEY_D)
 	_add_key_action("jump", KEY_SPACE)
+
 
 func _add_key_action(action: String, key: Key) -> void:
 	if not InputMap.has_action(action):
@@ -28,16 +37,28 @@ func _add_key_action(action: String, key: Key) -> void:
 	event.physical_keycode = key
 	InputMap.action_add_event(action, event)
 
+
+# --------------------------------------------------
+# WORLD
+# --------------------------------------------------
+
 func _setup_world() -> void:
 	var world_environment := WorldEnvironment.new()
 	var environment := Environment.new()
 
 	environment.background_mode = Environment.BG_SKY
 	environment.sky = Sky.new()
-	environment.sky.sky_material = ProceduralSkyMaterial.new()
+
+	var sky_material := ProceduralSkyMaterial.new()
+	sky_material.sky_top_color = Color(0.12, 0.32, 0.62)
+	sky_material.sky_horizon_color = Color(0.65, 0.78, 0.92)
+	sky_material.ground_bottom_color = Color(0.12, 0.16, 0.12)
+	sky_material.ground_horizon_color = Color(0.48, 0.57, 0.48)
+
+	environment.sky.sky_material = sky_material
 	environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	environment.ambient_light_color = Color(0.55, 0.62, 0.78)
-	environment.ambient_light_energy = 0.7
+	environment.ambient_light_color = Color(0.65, 0.70, 0.78)
+	environment.ambient_light_energy = 0.8
 	environment.tonemap_mode = Environment.TONE_MAPPER_FILMIC
 
 	world_environment.environment = environment
@@ -45,34 +66,219 @@ func _setup_world() -> void:
 
 	var sun := DirectionalLight3D.new()
 	sun.rotation_degrees = Vector3(-48, -32, 0)
-	sun.light_energy = 1.5
-	sun.shadow_enabled = true
+	sun.light_energy = 1.2
+	sun.shadow_enabled = false
 	add_child(sun)
 
-	var ground := MeshInstance3D.new()
-	var ground_mesh := PlaneMesh.new()
-	ground_mesh.size = Vector2(500, 500)
-	ground.mesh = ground_mesh
+	_create_ground()
+	_create_test_location()
 
-	var ground_material := StandardMaterial3D.new()
-	ground_material.albedo_color = Color(0.19, 0.28, 0.17)
-	ground_material.roughness = 1.0
-	ground.material_override = ground_material
-	ground.position.y = -0.08
+
+func _create_ground() -> void:
+	var ground := MeshInstance3D.new()
+	var mesh := PlaneMesh.new()
+
+	mesh.size = Vector2(500, 500)
+	ground.mesh = mesh
+
+	var material := StandardMaterial3D.new()
+	material.albedo_color = Color(0.20, 0.34, 0.19)
+	material.roughness = 1.0
+	ground.material_override = material
+
 	add_child(ground)
 
-	var ground_body := StaticBody3D.new()
-	var ground_collision := CollisionShape3D.new()
-	var ground_shape := BoxShape3D.new()
+	var body := StaticBody3D.new()
+	var collision := CollisionShape3D.new()
+	var shape := BoxShape3D.new()
 
-	ground_shape.size = Vector3(500, 0.2, 500)
-	ground_collision.shape = ground_shape
-	ground_collision.position.y = -0.1
+	shape.size = Vector3(500, 0.2, 500)
+	collision.shape = shape
+	collision.position.y = -0.1
 
-	ground_body.add_child(ground_collision)
-	add_child(ground_body)
+	body.add_child(collision)
+	add_child(body)
+
+
+func _create_test_location() -> void:
+	# ROAD
+
+	var road := MeshInstance3D.new()
+	var road_mesh := PlaneMesh.new()
+	road_mesh.size = Vector2(14, 120)
+	road.mesh = road_mesh
+	road.position = Vector3(0, 0.025, -25)
+
+	var road_material := StandardMaterial3D.new()
+	road_material.albedo_color = Color(0.12, 0.13, 0.15)
+	road_material.roughness = 1.0
+	road.material_override = road_material
+	add_child(road)
+
+	# ROAD MARKINGS
+
+	for i in range(12):
+		_add_box(
+			"RoadLine",
+			Vector3(0.22, 0.035, 3.0),
+			Vector3(0, 0.06, 24 - i * 9),
+			Color(0.95, 0.88, 0.55),
+			false
+		)
+
+	# BUILDINGS
+
+	_add_box(
+		"BuildingLeft",
+		Vector3(13, 9, 15),
+		Vector3(-19, 4.5, -24),
+		Color(0.48, 0.50, 0.53)
+	)
+
+	_add_box(
+		"BuildingRight",
+		Vector3(13, 12, 15),
+		Vector3(19, 6, -30),
+		Color(0.58, 0.43, 0.32)
+	)
+
+	_add_box(
+		"SmallBuilding",
+		Vector3(10, 6, 10),
+		Vector3(-25, 3, 7),
+		Color(0.42, 0.49, 0.56)
+	)
+
+	# TEST OBSTACLES
+
+	_add_box(
+		"Crate1",
+		Vector3(1.5, 1.5, 1.5),
+		Vector3(-4, 0.75, -5),
+		Color(0.55, 0.32, 0.15)
+	)
+
+	_add_box(
+		"Crate2",
+		Vector3(1.5, 1.5, 1.5),
+		Vector3(4, 0.75, -8),
+		Color(0.65, 0.42, 0.20)
+	)
+
+	_add_box(
+		"Barrier",
+		Vector3(5, 1, 0.8),
+		Vector3(0, 0.5, -15),
+		Color(0.85, 0.48, 0.12)
+	)
+
+	_add_box(
+		"Platform",
+		Vector3(5, 0.6, 5),
+		Vector3(9, 0.3, 3),
+		Color(0.35, 0.40, 0.46)
+	)
+
+	# TREES
+
+	_add_tree(Vector3(-12, 0, -5))
+	_add_tree(Vector3(-15, 0, -15))
+	_add_tree(Vector3(14, 0, -5))
+	_add_tree(Vector3(25, 0, 5))
+	_add_tree(Vector3(-28, 0, -12))
+
+
+func _add_box(
+	object_name: String,
+	box_size: Vector3,
+	world_position: Vector3,
+	color: Color,
+	with_collision: bool = true
+) -> void:
+	var mesh_instance := MeshInstance3D.new()
+	mesh_instance.name = object_name
+
+	var box_mesh := BoxMesh.new()
+	box_mesh.size = box_size
+	mesh_instance.mesh = box_mesh
+	mesh_instance.position = world_position
+
+	var material := StandardMaterial3D.new()
+	material.albedo_color = color
+	material.roughness = 0.9
+	mesh_instance.material_override = material
+
+	add_child(mesh_instance)
+
+	if with_collision:
+		var body := StaticBody3D.new()
+		body.position = world_position
+
+		var collision := CollisionShape3D.new()
+		var shape := BoxShape3D.new()
+		shape.size = box_size
+
+		collision.shape = shape
+		body.add_child(collision)
+		add_child(body)
+
+
+func _add_tree(world_position: Vector3) -> void:
+	var trunk := MeshInstance3D.new()
+	var trunk_mesh := CylinderMesh.new()
+
+	trunk_mesh.top_radius = 0.22
+	trunk_mesh.bottom_radius = 0.35
+	trunk_mesh.height = 2.5
+	trunk.mesh = trunk_mesh
+	trunk.position = world_position + Vector3(0, 1.25, 0)
+
+	var trunk_material := StandardMaterial3D.new()
+	trunk_material.albedo_color = Color(0.30, 0.19, 0.10)
+	trunk.material_override = trunk_material
+	add_child(trunk)
+
+	var leaves := MeshInstance3D.new()
+	var leaves_mesh := SphereMesh.new()
+
+	leaves_mesh.radius = 1.5
+	leaves_mesh.height = 3.0
+	leaves.mesh = leaves_mesh
+	leaves.position = world_position + Vector3(0, 3.0, 0)
+
+	var leaves_material := StandardMaterial3D.new()
+	leaves_material.albedo_color = Color(0.12, 0.35, 0.14)
+	leaves.material_override = leaves_material
+	add_child(leaves)
+
+
+# --------------------------------------------------
+# MENU
+# --------------------------------------------------
 
 func _show_main_menu() -> void:
+	_create_menu_layer()
+
+	var column := _build_menu_page(
+		"GRAND SANDBOX AUTO",
+		"OPEN WORLD  •  PHYSICS  •  FREEDOM"
+	)
+
+	_add_menu_button(column, "ИГРАТЬ", _show_mode_menu)
+	_add_menu_button(column, "НАСТРОЙКИ", _show_settings)
+	_add_menu_button(column, "ВЫХОД", _exit_game)
+
+	var info := Label.new()
+	info.text = "ANDROID EDITION  •  PROTOTYPE 0.2"
+	info.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	info.add_theme_color_override("font_color", Color(0.55, 0.65, 0.75))
+	column.add_child(info)
+
+
+func _create_menu_layer() -> void:
+	if is_instance_valid(menu_layer):
+		return
+
 	menu_layer = CanvasLayer.new()
 	add_child(menu_layer)
 
@@ -80,187 +286,179 @@ func _show_main_menu() -> void:
 	ui_root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	menu_layer.add_child(ui_root)
 
+
+func _build_menu_page(
+	title_text: String,
+	subtitle_text: String
+) -> VBoxContainer:
+	_clear_ui()
+
 	var background := ColorRect.new()
-	background.color = Color(0.035, 0.055, 0.085, 0.96)
+	background.color = Color(0.025, 0.045, 0.075, 0.97)
 	background.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	background.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	ui_root.add_child(background)
 
+	var center := CenterContainer.new()
+	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	ui_root.add_child(center)
+
+	var panel := PanelContainer.new()
+	panel.custom_minimum_size = Vector2(520, 0)
+
+	var panel_style := StyleBoxFlat.new()
+	panel_style.bg_color = Color(0.07, 0.10, 0.15, 1)
+	panel_style.border_color = Color(0.20, 0.40, 0.62, 1)
+	panel_style.set_border_width_all(2)
+	panel_style.set_corner_radius_all(18)
+	panel.add_theme_stylebox_override("panel", panel_style)
+
+	center.add_child(panel)
+
+	var margin := MarginContainer.new()
+	margin.add_theme_constant_override("margin_left", 28)
+	margin.add_theme_constant_override("margin_right", 28)
+	margin.add_theme_constant_override("margin_top", 26)
+	margin.add_theme_constant_override("margin_bottom", 26)
+	panel.add_child(margin)
+
+	var column := VBoxContainer.new()
+	column.add_theme_constant_override("separation", 15)
+	margin.add_child(column)
+
 	var title := Label.new()
-	title.text = "GRAND SANDBOX AUTO"
-	title.position = Vector2(70, 65)
-	title.add_theme_font_size_override("font_size", 48)
-	title.add_theme_color_override("font_color", Color(0.95, 0.97, 1.0))
-	ui_root.add_child(title)
+	title.text = title_text
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size",  thirty_two())
+	title.add_theme_color_override("font_color", Color(0.94, 0.97, 1))
+	column.add_child(title)
 
 	var subtitle := Label.new()
-	subtitle.text = "OPEN WORLD • PHYSICS • FREEDOM"
-	subtitle.position = Vector2(75, 125)
-	subtitle.add_theme_font_size_override("font_size", 17)
-	subtitle.add_theme_color_override("font_color", Color(0.45, 0.75, 1.0))
-	ui_root.add_child(subtitle)
+	subtitle.text = subtitle_text
+	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	subtitle.add_theme_font_size_override("font_size", 15)
+	subtitle.add_theme_color_override("font_color", Color(0.40, 0.72, 1))
+	column.add_child(subtitle)
 
-	_add_menu_button("ИГРАТЬ", Vector2(80, 260), Vector2(360, 72), _show_mode_menu)
-	_add_menu_button("НАСТРОЙКИ", Vector2(80, 350), Vector2(360, 64), _show_settings)
-	_add_menu_button("ВЫХОД", Vector2(80, 432), Vector2(360, 56), _exit_game)
+	var separator := HSeparator.new()
+	column.add_child(separator)
 
-	var info := Label.new()
-	info.text = "GODOT 4 • ANDROID EDITION"
-	info.position = Vector2(80, 550)
-	info.add_theme_font_size_override("font_size", 15)
-	info.add_theme_color_override("font_color", Color(0.55, 0.6, 0.68))
-	ui_root.add_child(info)
+	return column
+
+
+func thirty_two() -> int:
+	return 32
+
 
 func _add_menu_button(
-	label_text: String,
-	pos: Vector2,
-	button_size: Vector2,
+	parent: VBoxContainer,
+	button_text: String,
 	callback: Callable
 ) -> void:
 	var button := Button.new()
-	button.text = label_text
-	button.position = pos
-	button.size = button_size
-	button.add_theme_font_size_override("font_size", 23)
+	button.text = button_text
+	button.custom_minimum_size = Vector2(0, 62)
+	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	button.add_theme_font_size_override("font_size", 21)
 	button.pressed.connect(callback)
-	ui_root.add_child(button)
+	parent.add_child(button)
+
 
 func _show_mode_menu() -> void:
-	_clear_ui()
-
-	var title := Label.new()
-	title.text = "ВЫБЕРИ РЕЖИМ"
-	title.position = Vector2(80, 70)
-	title.add_theme_font_size_override("font_size", 38)
-	ui_root.add_child(title)
+	var column := _build_menu_page(
+		"ВЫБЕРИ РЕЖИМ",
+		"КАК ТЫ ХОЧЕШЬ ИГРАТЬ?"
+	)
 
 	_add_menu_button(
-		"SANDBOX\nСвободный мир",
-		Vector2(80, 220),
-		Vector2(390, 190),
+		column,
+		"SANDBOX — СВОБОДНЫЙ МИР",
 		func(): _start_game("sandbox")
 	)
 
 	_add_menu_button(
-		"CHALLENGES\nИспытания физики",
-		Vector2(510, 220),
-		Vector2(390, 190),
+		column,
+		"CHALLENGES — ИСПЫТАНИЯ",
 		func(): _start_game("challenges")
 	)
 
-	_add_menu_button(
-		"НАЗАД",
-		Vector2(80, 460),
-		Vector2(240, 60),
-		_show_main_menu
-	)
+	_add_menu_button(column, "НАЗАД", _show_main_menu)
+
 
 func _show_settings() -> void:
-	_clear_ui()
+	var column := _build_menu_page(
+		"НАСТРОЙКИ",
+		"ПАРАМЕТРЫ ИГРЫ"
+	)
 
-	var title := Label.new()
-	title.text = "НАСТРОЙКИ"
-	title.position = Vector2(70, 35)
-	title.add_theme_font_size_override("font_size", 38)
-	ui_root.add_child(title)
-
-	var panel := VBoxContainer.new()
-	panel.position = Vector2(80, 115)
-	panel.size = Vector2(850, 440)
-	panel.add_theme_constant_override("separation", 13)
-	ui_root.add_child(panel)
-
-	_add_option(
-		panel,
+	_add_setting_option(
+		column,
 		"Графика",
 		["Очень низкая", "Низкая", "Средняя", "Высокая", "Ультра"],
 		Settings.graphics_quality - 1,
 		func(v): Settings.graphics_quality = v + 1
 	)
 
-	_add_option(
-		panel,
+	_add_setting_option(
+		column,
 		"Текстуры",
 		["Очень низкие", "Низкие", "Средние", "Высокие", "Ультра"],
 		Settings.texture_quality - 1,
 		func(v): Settings.texture_quality = v + 1
 	)
 
-	_add_option(
-		panel,
+	_add_setting_option(
+		column,
 		"Тени",
 		["Выкл.", "Очень низкие", "Низкие", "Средние", "Высокие", "Ультра"],
 		Settings.shadow_quality,
 		func(v): Settings.shadow_quality = v
 	)
 
-	_add_option(
-		panel,
+	_add_setting_option(
+		column,
 		"NPC",
 		["Мало", "Средне", "Реалистично"],
 		Settings.npc_amount,
 		func(v): Settings.npc_amount = v
 	)
 
-	_add_option(
-		panel,
-		"Физика",
-		["Лёгкая", "Средняя", "Высокая", "Максимальная"],
-		Settings.physics_quality,
-		func(v): Settings.physics_quality = v
-	)
-
+	var fps_values := [15, 30, 60, 120, 144, 165, 185, 240, 0]
 	var fps_row := HBoxContainer.new()
-	panel.add_child(fps_row)
 
 	var fps_label := Label.new()
 	fps_label.text = "Ограничение FPS"
-	fps_label.custom_minimum_size.x = 250
+	fps_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	fps_row.add_child(fps_label)
 
 	var fps := OptionButton.new()
-	var fps_values := [15, 30, 60, 120, 144, 165, 185, 240, 0]
-
 	for value in fps_values:
 		fps.add_item("Без ограничений" if value == 0 else str(value))
 
-	var selected_fps := fps_values.find(Settings.target_fps)
-	fps.select(selected_fps if selected_fps >= 0 else 2)
+	var selected := fps_values.find(Settings.target_fps)
+	fps.select(selected if selected >= 0 else 2)
 
 	fps.item_selected.connect(func(index):
 		Settings.target_fps = fps_values[index]
 	)
 
 	fps_row.add_child(fps)
-
-	var distance_label := Label.new()
-	distance_label.text = "Дальность прорисовки: " + str(int(Settings.view_distance)) + " м"
-	panel.add_child(distance_label)
-
-	var distance := HSlider.new()
-	distance.min_value = 100
-	distance.max_value = 5000
-	distance.step = 100
-	distance.value = Settings.view_distance
-	distance.custom_minimum_size.x = 650
-
-	distance.value_changed.connect(func(v):
-		Settings.view_distance = v
-		distance_label.text = "Дальность прорисовки: " + str(int(v)) + " м"
-	)
-
-	panel.add_child(distance)
+	column.add_child(fps_row)
 
 	_add_menu_button(
-		"СОХРАНИТЬ И НАЗАД",
-		Vector2(80, 600),
-		Vector2(380, 65),
+		column,
+		"СОХРАНИТЬ",
 		func():
 			Settings.save_settings()
 			Settings.apply_settings()
 			_show_main_menu()
 	)
 
-func _add_option(
+	_add_menu_button(column, "НАЗАД", _show_main_menu)
+
+
+func _add_setting_option(
 	parent: VBoxContainer,
 	label_text: String,
 	choices: Array,
@@ -268,53 +466,63 @@ func _add_option(
 	callback: Callable
 ) -> void:
 	var row := HBoxContainer.new()
-	parent.add_child(row)
 
 	var label := Label.new()
 	label.text = label_text
-	label.custom_minimum_size.x = 250
+	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	row.add_child(label)
 
 	var option := OptionButton.new()
-
 	for choice in choices:
 		option.add_item(choice)
 
 	option.select(clampi(selected, 0, choices.size() - 1))
 	option.item_selected.connect(callback)
+
 	row.add_child(option)
+	parent.add_child(row)
+
 
 func _clear_ui() -> void:
 	for child in ui_root.get_children():
 		child.queue_free()
 
+
+# --------------------------------------------------
+# GAME
+# --------------------------------------------------
+
 func _start_game(mode: String) -> void:
 	current_mode = mode
 	world_started = true
 
-	menu_layer.queue_free()
+	if is_instance_valid(menu_layer):
+		menu_layer.queue_free()
+		menu_layer = null
 
 	player = CharacterBody3D.new()
 	player.set_script(load("res://scripts/player.gd"))
-	player.position = Vector3(0, 1, 0)
+	player.position = Vector3(0, 0, 8)
 	add_child(player)
 
-	var hud := CanvasLayer.new()
-	add_child(hud)
+	hud_layer = CanvasLayer.new()
+	add_child(hud_layer)
 
-	_create_touch_hud(hud)
+	_create_touch_hud()
 
-func _create_touch_hud(hud: CanvasLayer) -> void:
+
+func _create_touch_hud() -> void:
 	var root := Control.new()
 	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	hud.add_child(root)
+	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hud_layer.add_child(root)
 
-	# ЛЕВЫЙ АНАЛОГОВЫЙ ДЖОЙСТИК
-	# Создаём непосредственно экземпляр собственного скрипта.
+	# JOYSTICK
 
 	var joystick = VirtualJoystickScript.new()
-	joystick.position = Vector2(65, 760)
-	joystick.size = Vector2(220, 220)
+	joystick.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT)
+	joystick.position = Vector2(35, -220)
+	joystick.size = Vector2(190, 190)
 
 	joystick.vector_changed.connect(func(value: Vector2):
 		if is_instance_valid(player):
@@ -323,13 +531,14 @@ func _create_touch_hud(hud: CanvasLayer) -> void:
 
 	root.add_child(joystick)
 
-	# ПРЫЖОК
+	# JUMP BUTTON
 
 	var jump := Button.new()
 	jump.text = "ПРЫЖОК"
-	jump.position = Vector2(1640, 820)
-	jump.size = Vector2(190, 100)
-	jump.add_theme_font_size_override("font_size", 22)
+	jump.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT)
+	jump.position = Vector2(-180, -120)
+	jump.size = Vector2(150, 76)
+	jump.add_theme_font_size_override("font_size", 18)
 
 	jump.button_down.connect(func():
 		Input.action_press("jump")
@@ -341,18 +550,20 @@ func _create_touch_hud(hud: CanvasLayer) -> void:
 
 	root.add_child(jump)
 
-	# МЕНЮ
+	# RETURN TO MENU
 
 	var exit_button := Button.new()
 	exit_button.text = "МЕНЮ"
-	exit_button.position = Vector2(30, 25)
-	exit_button.size = Vector2(130, 55)
+	exit_button.set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT)
+	exit_button.position = Vector2(24, 24)
+	exit_button.size = Vector2(120, 54)
 
 	exit_button.pressed.connect(func():
 		get_tree().reload_current_scene()
 	)
 
 	root.add_child(exit_button)
+
 
 func _exit_game() -> void:
 	get_tree().quit()
