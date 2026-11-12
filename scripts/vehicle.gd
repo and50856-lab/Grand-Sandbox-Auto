@@ -1,19 +1,20 @@
 extends RigidBody3D
 
-@export var body_color := Color(0.75, 0.12, 0.10)
-@export var engine_power := 16.0
-@export var steering_power := 1.2
-@export var max_speed := 30.0
-@export var brake_power := 24.0
+@export var body_color: Color = Color(0.75, 0.12, 0.10)
+@export var engine_power: float = 16.0
+@export var steering_power: float = 1.2
+@export var max_speed: float = 30.0
+@export var brake_power: float = 24.0
 
 var driver: Node3D
-var driving := false
-var touch_input := Vector2.ZERO
+var driving: bool = false
+var touch_input: Vector2 = Vector2.ZERO
 
 var vehicle_camera: Camera3D
 var wheel_nodes: Array[Node3D] = []
 
-var health := 100.0
+var health: float = 100.0
+var brake_timer: float = 0.0
 
 
 func _ready() -> void:
@@ -30,6 +31,10 @@ func _ready() -> void:
 	_build_camera()
 
 
+# ==================================================
+# КОРПУС
+# ==================================================
+
 func _build_body() -> void:
 	var collision := CollisionShape3D.new()
 	var shape := BoxShape3D.new()
@@ -37,6 +42,7 @@ func _build_body() -> void:
 	shape.size = Vector3(1.9, 0.75, 4.0)
 	collision.shape = shape
 	collision.position.y = 0.75
+
 	add_child(collision)
 
 	var chassis := MeshInstance3D.new()
@@ -64,13 +70,29 @@ func _build_body() -> void:
 	var glass := StandardMaterial3D.new()
 	glass.albedo_color = Color(0.08, 0.17, 0.23)
 	glass.roughness = 0.2
+
 	cabin.material_override = glass
 	add_child(cabin)
 
-	_add_light(Vector3(-0.62, 0.8, -2.02), Color(1.0, 0.92, 0.72))
-	_add_light(Vector3(0.62, 0.8, -2.02), Color(1.0, 0.92, 0.72))
-	_add_light(Vector3(-0.62, 0.8, 2.02), Color(0.9, 0.04, 0.02))
-	_add_light(Vector3(0.62, 0.8, 2.02), Color(0.9, 0.04, 0.02))
+	_add_light(
+		Vector3(-0.62, 0.8, -2.02),
+		Color(1.0, 0.92, 0.72)
+	)
+
+	_add_light(
+		Vector3(0.62, 0.8, -2.02),
+		Color(1.0, 0.92, 0.72)
+	)
+
+	_add_light(
+		Vector3(-0.62, 0.8, 2.02),
+		Color(0.9, 0.04, 0.02)
+	)
+
+	_add_light(
+		Vector3(0.62, 0.8, 2.02),
+		Color(0.9, 0.04, 0.02)
+	)
 
 
 func _add_light(pos: Vector3, color: Color) -> void:
@@ -90,6 +112,10 @@ func _add_light(pos: Vector3, color: Color) -> void:
 	instance.material_override = material
 	add_child(instance)
 
+
+# ==================================================
+# КОЛЁСА
+# ==================================================
 
 func _build_wheels() -> void:
 	for x in [-0.98, 0.98]:
@@ -111,9 +137,14 @@ func _build_wheels() -> void:
 			material.roughness = 0.95
 
 			wheel.material_override = material
+
 			add_child(wheel)
 			wheel_nodes.append(wheel)
 
+
+# ==================================================
+# КАМЕРА
+# ==================================================
 
 func _build_camera() -> void:
 	vehicle_camera = Camera3D.new()
@@ -122,15 +153,32 @@ func _build_camera() -> void:
 	vehicle_camera.fov = 78.0
 	vehicle_camera.near = 0.08
 	vehicle_camera.far = Settings.view_distance
+
 	add_child(vehicle_camera)
 
+
+func apply_settings() -> void:
+	if is_instance_valid(vehicle_camera):
+		vehicle_camera.far = Settings.view_distance
+
+
+# ==================================================
+# УПРАВЛЕНИЕ
+# ==================================================
 
 func set_touch_input(value: Vector2) -> void:
 	touch_input = value.limit_length(1.0)
 
 
+func brake() -> void:
+	brake_timer = maxf(brake_timer, 0.25)
+
+
 func enter_vehicle(player: Node3D) -> void:
 	if driving:
+		return
+
+	if not is_instance_valid(player):
 		return
 
 	driver = player
@@ -138,7 +186,7 @@ func enter_vehicle(player: Node3D) -> void:
 	touch_input = Vector2.ZERO
 
 	if driver.has_method("enter_vehicle"):
-		driver.enter_vehicle(self)
+		driver.call("enter_vehicle", self)
 
 	vehicle_camera.make_current()
 
@@ -147,24 +195,42 @@ func exit_vehicle(player: Node3D) -> void:
 	if not driving:
 		return
 
+	if not is_instance_valid(player):
+		return
+
 	driving = false
 	touch_input = Vector2.ZERO
+	brake_timer = 0.0
 
-	var exit_position := global_position + global_transform.basis.x * 2.5
+	var exit_position := (
+		global_position + global_transform.basis.x * 2.5
+	)
+
 	exit_position.y = 0.1
 
 	if player.has_method("exit_vehicle"):
-		player.exit_vehicle(exit_position)
+		player.call("exit_vehicle", exit_position)
 
 	driver = null
 
+
+# ==================================================
+# ФИЗИКА И ДВИЖЕНИЕ
+# ==================================================
 
 func _physics_process(delta: float) -> void:
 	if not driving:
 		return
 
-	var throttle := Input.get_axis("move_back", "move_forward")
-	var steering := Input.get_axis("move_left", "move_right")
+	var throttle := Input.get_axis(
+		"move_back",
+		"move_forward"
+	)
+
+	var steering := Input.get_axis(
+		"move_left",
+		"move_right"
+	)
 
 	if absf(touch_input.y) > 0.05:
 		throttle = -touch_input.y
@@ -188,6 +254,11 @@ func _physics_process(delta: float) -> void:
 			)
 
 	if Input.is_action_pressed("jump"):
+		brake_timer = maxf(brake_timer, 0.05)
+
+	if brake_timer > 0.0:
+		brake_timer = maxf(brake_timer - delta, 0.0)
+
 		apply_central_force(
 			-linear_velocity * brake_power * mass * 0.01
 		)
@@ -200,6 +271,7 @@ func _physics_process(delta: float) -> void:
 
 	if absf(forward_speed) > 0.5:
 		var reverse_factor := 1.0
+
 		if forward_speed < 0.0:
 			reverse_factor = -1.0
 
