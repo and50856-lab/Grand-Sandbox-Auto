@@ -48,7 +48,6 @@ jobs:
           mkdir -p ~/.local/share/godot/export_templates/4.5.stable
           unzip -o Godot_v4.5-stable_export_templates.tpz -d /tmp/godot-templates
           cp -r /tmp/godot-templates/templates/. ~/.local/share/godot/export_templates/4.5.stable/
-          cp /tmp/godot-templates/version.txt ~/.local/share/godot/export_templates/4.5.stable/version.txt
 
       - name: Configure Android paths
         run: |
