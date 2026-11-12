@@ -11,7 +11,7 @@ var gravity: float = ProjectSettings.get_setting(
 )
 
 var camera_yaw := 0.0
-var camera_pitch := 0.28
+var camera_pitch := -0.30
 
 var touch_move := Vector2.ZERO
 
@@ -30,6 +30,10 @@ func _ready() -> void:
 	_build_camera()
 
 
+# ==================================================
+# CHARACTER MODEL
+# ==================================================
+
 func _build_character() -> void:
 	var collision := CollisionShape3D.new()
 	var capsule := CapsuleShape3D.new()
@@ -41,9 +45,11 @@ func _build_character() -> void:
 	collision.position.y = 0.9
 	add_child(collision)
 
-	var model_scene: PackedScene = load("res://assets/character.glb")
+	var model_scene: PackedScene = load(
+		"res://assets/character.glb"
+	)
 
-	if model_scene:
+	if model_scene != null:
 		var model := model_scene.instantiate()
 		model.name = "PlayerModel"
 		add_child(model)
@@ -62,31 +68,53 @@ func _add_fallback_model() -> void:
 	visual.position.y = 0.9
 
 	var material := StandardMaterial3D.new()
-	material.albedo_color = Color(0.15, 0.65, 0.95)
-	visual.material_override = material
+	material.albedo_color = Color(0.1, 0.65, 1.0)
+	material.roughness = 0.65
 
+	visual.material_override = material
 	add_child(visual)
 
 
+# ==================================================
+# CAMERA
+# ==================================================
+
 func _build_camera() -> void:
 	camera_pivot = Node3D.new()
+	camera_pivot.name = "CameraPivot"
 	camera_pivot.position.y = 1.35
 	add_child(camera_pivot)
 
 	camera = Camera3D.new()
-	camera.position = Vector3(0, 2.6, 6.2)
+	camera.name = "ThirdPersonCamera"
+
+	# Камера находится позади и выше персонажа.
+	camera.position = Vector3(0, 2.2, 7.5)
+
+	# Отрицательный угол направляет взгляд вниз.
+	camera.rotation.x = camera_pitch
+
 	camera.fov = 75.0
+	camera.near = 0.05
 	camera.far = 1000.0
 	camera.current = true
 
 	camera_pivot.add_child(camera)
-	camera_pivot.rotation.x = camera_pitch
+	camera.make_current()
 
+
+# ==================================================
+# CAMERA INPUT
+# ==================================================
 
 func _input(event: InputEvent) -> void:
+	# ПК: вращение правой кнопкой мыши.
+
 	if event is InputEventMouseMotion:
 		if Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT):
 			_rotate_camera(event.relative)
+
+	# Телефон: касание правой части экрана.
 
 	if event is InputEventScreenTouch:
 		var viewport_size := get_viewport().get_visible_rect().size
@@ -103,6 +131,8 @@ func _input(event: InputEvent) -> void:
 		elif event.index == look_touch_id:
 			look_touch_id = -1
 
+	# Телефон: перемещение пальца.
+
 	if event is InputEventScreenDrag:
 		if event.index == look_touch_id:
 			var delta := event.position - last_touch
@@ -114,18 +144,32 @@ func _rotate_camera(delta: Vector2) -> void:
 	camera_yaw -= delta.x * mouse_sensitivity
 	camera_pitch -= delta.y * mouse_sensitivity
 
-	camera_pitch = clampf(camera_pitch, 0.05, 0.85)
+	# Не даём камере перевернуться.
+	camera_pitch = clampf(camera_pitch, -0.85, 0.15)
 
+	# Горизонтальный поворот персонажа.
 	rotation.y = camera_yaw
-	camera_pivot.rotation.x = camera_pitch
 
+	# Вертикальный поворот камеры.
+	camera.rotation.x = camera_pitch
+
+
+# ==================================================
+# MOVEMENT
+# ==================================================
 
 func _physics_process(delta: float) -> void:
+	# Гравитация.
+
 	if not is_on_floor():
 		velocity.y -= gravity * delta
 
+	# Прыжок.
+
 	if Input.is_action_just_pressed("jump") and is_on_floor():
 		velocity.y = jump_force
+
+	# Управление с клавиатуры.
 
 	var input_vector := Input.get_vector(
 		"move_left",
@@ -133,6 +177,8 @@ func _physics_process(delta: float) -> void:
 		"move_forward",
 		"move_back"
 	)
+
+	# Управление с мобильного джойстика.
 
 	if touch_move.length() > 0.05:
 		input_vector = touch_move
@@ -154,6 +200,8 @@ func _physics_process(delta: float) -> void:
 	var current_speed := walk_speed + (
 		run_speed - walk_speed
 	) * strength
+
+	# Движение.
 
 	if direction.length() > 0.01:
 		velocity.x = move_toward(
