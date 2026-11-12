@@ -6,7 +6,6 @@ var player: CharacterBody3D
 var menu_layer: CanvasLayer
 var world_started := false
 var current_mode := "sandbox"
-
 var ui_root: Control
 
 func _ready() -> void:
@@ -310,16 +309,18 @@ func _create_touch_hud(hud: CanvasLayer) -> void:
 	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	hud.add_child(root)
 
-	# ЛЕВЫЙ ВИРТУАЛЬНЫЙ ДЖОЙСТИК
+	# ЛЕВЫЙ АНАЛОГОВЫЙ ДЖОЙСТИК
+	# Создаём непосредственно экземпляр собственного скрипта.
 
-	var joystick := Control.new()
-	joystick.set_script(VirtualJoystickScript)
+	var joystick = VirtualJoystickScript.new()
 	joystick.position = Vector2(65, 760)
 	joystick.size = Vector2(220, 220)
+
 	joystick.vector_changed.connect(func(value: Vector2):
 		if is_instance_valid(player):
 			player.touch_move = value
 	)
+
 	root.add_child(joystick)
 
 	# ПРЫЖОК
@@ -340,7 +341,7 @@ func _create_touch_hud(hud: CanvasLayer) -> void:
 
 	root.add_child(jump)
 
-	# ВЫХОД В МЕНЮ
+	# МЕНЮ
 
 	var exit_button := Button.new()
 	exit_button.text = "МЕНЮ"
