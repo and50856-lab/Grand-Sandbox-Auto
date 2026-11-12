@@ -81,6 +81,9 @@ func _build_camera() -> void:
 func set_touch_input(value: Vector2) -> void:
 	touch_move = value.limit_length(1.0)
 
+	if in_vehicle and is_instance_valid(current_vehicle):
+		current_vehicle.set_touch_input(touch_move)
+
 
 func _input(event: InputEvent) -> void:
 	if in_vehicle:
@@ -142,6 +145,7 @@ func _physics_process(delta: float) -> void:
 	var direction := (transform.basis * local_dir).normalized()
 
 	var speed := walk_speed
+
 	if Input.is_action_pressed("run") or input_vector.length() > 0.9:
 		speed = run_speed
 
@@ -199,6 +203,7 @@ func exit_vehicle(position_out: Vector3) -> void:
 	velocity = Vector3.ZERO
 	in_vehicle = false
 	current_vehicle = null
+	touch_move = Vector2.ZERO
 	visible = true
 	set_physics_process(true)
 	camera.current = true
