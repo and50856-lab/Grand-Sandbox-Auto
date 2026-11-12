@@ -1,78 +1,33 @@
-name: Build Grand Sandbox Auto
+config_version=5
 
-on:
-  workflow_dispatch:
+[application]
 
-permissions:
-  contents: read
+config/name="Grand Sandbox Auto"
+run/main_scene="res://scenes/main.tscn"
+config/features=PackedStringArray("4.5", "Mobile")
 
-jobs:
-  build:
-    name: Build Android APK
-    runs-on: ubuntu-24.04
+[display]
 
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+window/size/viewport_width=1920
+window/size/viewport_height=1080
+window/size/window_width_override=1280
+window/size/window_height_override=720
+window/handheld/orientation=1
+window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
 
-      - name: Install Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "17"
+[rendering]
 
-      - name: Install Android SDK
-        uses: android-actions/setup-android@v4
-        with:
-          packages: platform-tools
+renderer/rendering_method="mobile"
+renderer/rendering_method.mobile="mobile"
+textures/default_filters/use_nearest_mipmap_filter=false
+textures/vram_compression/import_etc2_astc=true
+environment/defaults/default_clear_color=Color(0.055, 0.075, 0.11, 1)
 
-      - name: Install Android SDK packages
-        run: |
-          sdkmanager \
-            "platforms;android-35" \
-            "build-tools;35.0.0" \
-            "cmdline-tools;latest" \
-            "cmake;3.10.2.4988404" \
-            "ndk;28.1.13356709"
+[physics]
 
-      - name: Download Godot 4.5
-        run: |
-          wget https://github.com/godotengine/godot/releases/download/4.5-stable/Godot_v4.5-stable_linux.x86_64.zip
-          unzip Godot_v4.5-stable_linux.x86_64.zip
-          chmod +x Godot_v4.5-stable_linux.x86_64
-          sudo mv Godot_v4.5-stable_linux.x86_64 /usr/local/bin/godot
+3d/default_gravity=9.8
 
-      - name: Download Godot export templates
-        run: |
-          wget https://github.com/godotengine/godot/releases/download/4.5-stable/Godot_v4.5-stable_export_templates.tpz
-          mkdir -p ~/.local/share/godot/export_templates/4.5.stable
-          unzip -o Godot_v4.5-stable_export_templates.tpz -d /tmp/godot-templates
-          cp -r /tmp/godot-templates/templates/. ~/.local/share/godot/export_templates/4.5.stable/
+[autoload]
 
-      - name: Configure Android paths
-        run: |
-          mkdir -p ~/.config/godot
-          cat > ~/.config/godot/editor_settings-4.tres <<EOF
-          [gd_resource type="EditorSettings" format=3]
-
-          [resource]
-          export/android/android_sdk_path = "$ANDROID_HOME"
-          export/android/java_sdk_path = "$JAVA_HOME"
-          EOF
-
-      - name: Import project
-        run: |
-          godot --headless --editor --path . --import
-
-      - name: Build Android APK
-        run: |
-          mkdir -p build
-          godot --headless --path . --export-debug "Android" build/GrandSandboxAuto.apk
-
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: Grand-Sandbox-Auto-APK
-          path: build/GrandSandboxAuto.apk
-          if-no-files-found: error
-          retention-days: 14
+Settings="*res://scripts/settings.gd"
