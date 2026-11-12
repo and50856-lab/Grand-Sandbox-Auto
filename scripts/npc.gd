@@ -1,9 +1,19 @@
 extends CharacterBody3D
 
-@export var move_speed := 1.5
+@export var move_speed: float = 1.7
+@export var vehicle_search_distance: float = 35.0
+@export var vehicle_drive_distance: float = 55.0
 
-var gravity: float = ProjectSettings.get_setting(
-	"physics/3d/default_gravity"
+enum NPCState {
+	WANDERING,
+	APPROACHING_VEHICLE,
+	DRIVING
+}
+
+var state: NPCState = NPCState.WANDERING
+
+var gravity: float = float(
+	ProjectSettings.get_setting("physics/3d/default_gravity")
 )
 
 var direction := Vector3.ZERO
@@ -13,8 +23,13 @@ var animation_time := 0.0
 var left_leg: Node3D
 var right_leg: Node3D
 
+var target_vehicle: Node3D = null
+var current_vehicle: Node3D = null
+var approach_position := Vector3.ZERO
+
 
 func _ready() -> void:
+	add_to_group("npcs")
 	_build_collision()
 	_build_character()
 	_choose_direction()
@@ -23,13 +38,10 @@ func _ready() -> void:
 func _build_collision() -> void:
 	var collision := CollisionShape3D.new()
 	var shape := CapsuleShape3D.new()
-
 	shape.radius = 0.3
 	shape.height = 1.7
-
 	collision.shape = shape
 	collision.position.y = 0.85
-
 	add_child(collision)
 
 
@@ -49,14 +61,11 @@ func _add_capsule(
 ) -> MeshInstance3D:
 	var instance := MeshInstance3D.new()
 	var mesh := CapsuleMesh.new()
-
 	mesh.radius = radius
 	mesh.height = height
-
 	instance.mesh = mesh
 	instance.position = position_value
 	instance.material_override = _make_material(color)
-
 	parent.add_child(instance)
 	return instance
 
@@ -77,17 +86,12 @@ func _build_character() -> void:
 	var pants := Color(0.12, 0.15, 0.20)
 	var skin := Color(0.78, 0.58, 0.42)
 
-	_add_capsule(
-		self, 0.27, 0.78,
-		Vector3(0, 1.0, 0), shirt
-	)
+	_add_capsule(self, 0.27, 0.78, Vector3(0, 1.0, 0), shirt)
 
 	var head := MeshInstance3D.new()
 	var head_mesh := SphereMesh.new()
-
 	head_mesh.radius = 0.22
 	head_mesh.height = 0.44
-
 	head.mesh = head_mesh
 	head.position = Vector3(0, 1.62, 0)
 	head.material_override = _make_material(skin)
@@ -96,20 +100,12 @@ func _build_character() -> void:
 	left_leg = Node3D.new()
 	left_leg.position = Vector3(-0.14, 0.55, 0)
 	add_child(left_leg)
-
-	_add_capsule(
-		left_leg, 0.14, 0.75,
-		Vector3(0, -0.16, 0), pants
-	)
+	_add_capsule(left_leg, 0.14, 0.75, Vector3(0, -0.16, 0), pants)
 
 	right_leg = Node3D.new()
 	right_leg.position = Vector3(0.14, 0.55, 0)
 	add_child(right_leg)
-
-	_add_capsule(
-		right_leg, 0.14, 0.75,
-		Vector3(0, -0.16, 0), pants
-	)
+	_add_capsule(right_leg, 0.14, 0.75, Vector3(0, -0.16, 0), pants)
 
 
 func _choose_direction() -> void:
@@ -117,22 +113,81 @@ func _choose_direction() -> void:
 	rng.randomize()
 
 	var angle := rng.randf_range(0.0, TAU)
-	direction = Vector3(cos(angle), 0, sin(angle))
+	direction = Vector3(cos(angle), 0.0, sin(angle))
 	change_timer = rng.randf_range(2.0, 5.0)
+
+
+func _find_vehicle() -> void:
+	var nearest: Node3D = null
+	var nearest_distance := vehicle_search_distance
+
+	for item in get_tree().get_nodes_in_group("vehicles"):
+		if not item is Node3D:
+			continue
+
+		var vehicle := item as Node3D
+
+		if not is_instance_valid(vehicle):
+			continue
+
+		if vehicle.get("driving") == true:
+			continue
+		if vehicle.get("ai_driving") == true:
+			continue
+
+		var distance := global_position.distance_to(vehicle.global_position)
+
+		if distance < nearest_distance:
+			nearest_distance = distance
+			nearest = vehicle
+
+	if not is_instance_valid(nearest):
+		return
+
+	if not nearest.has_method("assign_ai_driver"):
+		return
+
+	target_vehicle = nearest
+
+	var side := nearest.global_transform.basis.x
+	approach_position = nearest.global_position + side * 2.4
+	approach_position.y = global_position.y
+
+	state = NPCState.APPROACHING_VEHICLE
 
 
 func _physics_process(delta: float) -> void:
 	animation_time += delta
+
+	if state == NPCState.DRIVING:
+		_update_walking_animation(false)
+		return
+
+	if not is_on_floor():
+		velocity.y -= gravity * delta
+	elif velocity.y < 0.0:
+		velocity.y = -0.5
+
+	match state:
+		NPCState.WANDERING:
+			_update_wandering(delta)
+		NPCState.APPROACHING_VEHICLE:
+			_update_approaching(delta)
+
+	move_and_slide()
+
+	var walking := Vector2(velocity.x, velocity.z).length() > 0.2
+	_update_walking_animation(walking)
+
+
+func _update_wandering(delta: float) -> void:
 	change_timer -= delta
 
 	if change_timer <= 0.0:
 		_choose_direction()
 
-	if not is_on_floor():
-		velocity.y -= gravity * delta
-	else:
-		if velocity.y < 0.0:
-			velocity.y = -0.5
+		if randf() < 0.45:
+			_find_vehicle()
 
 	velocity.x = move_toward(
 		velocity.x,
@@ -146,8 +201,6 @@ func _physics_process(delta: float) -> void:
 		4.0 * delta
 	)
 
-	move_and_slide()
-
 	if direction.length() > 0.1:
 		rotation.y = lerp_angle(
 			rotation.y,
@@ -155,12 +208,94 @@ func _physics_process(delta: float) -> void:
 			delta * 4.0
 		)
 
-	var walking := Vector2(
-		velocity.x,
-		velocity.z
-	).length() > 0.2
 
+func _update_approaching(delta: float) -> void:
+	if not is_instance_valid(target_vehicle):
+		state = NPCState.WANDERING
+		_choose_direction()
+		return
+
+	if target_vehicle.get("driving") == true or target_vehicle.get("ai_driving") == true:
+		state = NPCState.WANDERING
+		target_vehicle = null
+		_choose_direction()
+		return
+
+	var to_target := approach_position - global_position
+	to_target.y = 0.0
+
+	if to_target.length() < 1.8:
+		var destination := global_position + Vector3(
+			randf_range(-vehicle_drive_distance, vehicle_drive_distance),
+			0.0,
+			randf_range(-vehicle_drive_distance, vehicle_drive_distance)
+		)
+
+		var accepted: bool = target_vehicle.call(
+			"assign_ai_driver",
+			self,
+			destination
+		)
+
+		if accepted:
+			return
+
+		state = NPCState.WANDERING
+		target_vehicle = null
+		_choose_direction()
+		return
+
+	direction = to_target.normalized()
+
+	velocity.x = move_toward(
+		velocity.x,
+		direction.x * move_speed,
+		5.0 * delta
+	)
+
+	velocity.z = move_toward(
+		velocity.z,
+		direction.z * move_speed,
+		5.0 * delta
+	)
+
+	rotation.y = lerp_angle(
+		rotation.y,
+		atan2(direction.x, direction.z),
+		delta * 5.0
+	)
+
+
+func enter_vehicle(vehicle: Node3D) -> void:
+	current_vehicle = vehicle
+	target_vehicle = null
+	state = NPCState.DRIVING
+
+	velocity = Vector3.ZERO
+	collision_layer = 0
+	collision_mask = 0
+	visible = false
+
+
+func exit_vehicle(position_out: Vector3) -> void:
+	global_position = position_out
+	velocity = Vector3.ZERO
+
+	collision_layer = 1
+	collision_mask = 1
+	visible = true
+
+	current_vehicle = null
+	target_vehicle = null
+	state = NPCState.WANDERING
+	_choose_direction()
+
+
+func _update_walking_animation(walking: bool) -> void:
 	var swing := sin(animation_time * 6.0) * 0.4 if walking else 0.0
 
-	left_leg.rotation.x = swing
-	right_leg.rotation.x = -swing
+	if is_instance_valid(left_leg):
+		left_leg.rotation.x = swing
+
+	if is_instance_valid(right_leg):
+		right_leg.rotation.x = -swing
