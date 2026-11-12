@@ -7,6 +7,7 @@ extends CharacterBody3D
 @export var mouse_sensitivity := 0.004
 
 var gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity")
+
 var camera_yaw := 0.0
 var camera_pitch := -0.15
 
@@ -25,8 +26,10 @@ func _ready() -> void:
 func _build_character() -> void:
 	var collision := CollisionShape3D.new()
 	var capsule := CapsuleShape3D.new()
+
 	capsule.radius = 0.38
 	capsule.height = 1.8
+
 	collision.shape = capsule
 	collision.position.y = 0.9
 	add_child(collision)
@@ -51,25 +54,35 @@ func _build_camera() -> void:
 	camera.fov = 75.0
 	camera_pivot.add_child(camera)
 
-func _unhandled_input(event: InputEvent) -> void:
-	if event is InputEventMouseMotion and Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT):
-		_rotate_camera(event.relative)
+func _input(event: InputEvent) -> void:
+	if event is InputEventMouseMotion:
+		if Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT):
+			_rotate_camera(event.relative)
 
 	if event is InputEventScreenTouch:
-		if event.pressed and event.position.x > get_viewport().size.x * 0.45:
-			look_touch_id = event.index
-			last_touch = event.position
-		elif not event.pressed and event.index == look_touch_id:
+		var viewport_size := get_viewport().get_visible_rect().size
+
+		if event.pressed:
+			if (
+				event.position.x > viewport_size.x * 0.45
+				and event.position.y < viewport_size.y * 0.72
+				and look_touch_id == -1
+			):
+				look_touch_id = event.index
+				last_touch = event.position
+		elif event.index == look_touch_id:
 			look_touch_id = -1
 
-	if event is InputEventScreenDrag and event.index == look_touch_id:
-		var delta := event.position - last_touch
-		last_touch = event.position
-		_rotate_camera(delta)
+	if event is InputEventScreenDrag:
+		if event.index == look_touch_id:
+			var delta := event.position - last_touch
+			last_touch = event.position
+			_rotate_camera(delta)
 
 func _rotate_camera(delta: Vector2) -> void:
 	camera_yaw -= delta.x * mouse_sensitivity
 	camera_pitch -= delta.y * mouse_sensitivity
+
 	camera_pitch = clampf(camera_pitch, -1.0, 0.65)
 
 	rotation.y = camera_yaw
@@ -93,15 +106,39 @@ func _physics_process(delta: float) -> void:
 		input_vector = touch_move
 
 	var strength := input_vector.length()
-	var direction := (transform.basis * Vector3(input_vector.x, 0, input_vector.y)).normalized()
 
-	var current_speed := walk_speed + (run_speed - walk_speed) * strength
+	var direction := (
+		transform.basis *
+		Vector3(input_vector.x, 0, input_vector.y)
+	).normalized()
+
+	var current_speed := walk_speed + (
+		run_speed - walk_speed
+	) * strength
 
 	if direction.length() > 0.01:
-		velocity.x = move_toward(velocity.x, direction.x * current_speed, acceleration * delta)
-		velocity.z = move_toward(velocity.z, direction.z * current_speed, acceleration * delta)
+		velocity.x = move_toward(
+			velocity.x,
+			direction.x * current_speed,
+			acceleration * delta
+		)
+
+		velocity.z = move_toward(
+			velocity.z,
+			direction.z * current_speed,
+			acceleration * delta
+		)
 	else:
-		velocity.x = move_toward(velocity.x, 0.0, acceleration * delta)
-		velocity.z = move_toward(velocity.z, 0.0, acceleration * delta)
+		velocity.x = move_toward(
+			velocity.x,
+			0.0,
+			acceleration * delta
+		)
+
+		velocity.z = move_toward(
+			velocity.z,
+			0.0,
+			acceleration * delta
+		)
 
 	move_and_slide()
