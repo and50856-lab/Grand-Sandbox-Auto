@@ -31,3 +31,4 @@ environment/defaults/default_clear_color=Color(0.055, 0.075, 0.11, 1)
 [autoload]
 
 Settings="*res://scripts/settings.gd"
+AudioManager="*res://scripts/audio_manager.gd"
