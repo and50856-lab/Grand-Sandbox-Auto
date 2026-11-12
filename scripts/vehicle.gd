@@ -6,7 +6,7 @@ extends RigidBody3D
 @export var max_speed: float = 30.0
 @export var brake_power: float = 24.0
 
-var driver: Node3D
+var driver: Node3D = null
 var driving: bool = false
 var touch_input: Vector2 = Vector2.ZERO
 
@@ -120,13 +120,14 @@ func _add_light(pos: Vector3, color: Color) -> void:
 func _build_wheels() -> void:
 	for x in [-0.98, 0.98]:
 		for z in [-1.25, 1.25]:
+			# Визуальная модель колеса.
 			var wheel := MeshInstance3D.new()
 			var mesh := CylinderMesh.new()
 
 			mesh.top_radius = 0.43
 			mesh.bottom_radius = 0.43
 			mesh.height = 0.28
-			mesh.radial_segments = 8
+			mesh.radial_segments = 12
 
 			wheel.mesh = mesh
 			wheel.rotation.z = PI / 2.0
@@ -140,6 +141,16 @@ func _build_wheels() -> void:
 
 			add_child(wheel)
 			wheel_nodes.append(wheel)
+
+			# Физическая коллизия колеса.
+			var wheel_collision := CollisionShape3D.new()
+			var wheel_shape := SphereShape3D.new()
+
+			wheel_shape.radius = 0.38
+			wheel_collision.shape = wheel_shape
+			wheel_collision.position = Vector3(x, 0.43, z)
+
+			add_child(wheel_collision)
 
 
 # ==================================================
@@ -232,6 +243,7 @@ func _physics_process(delta: float) -> void:
 		"move_right"
 	)
 
+	# Сенсорное управление имеет приоритет.
 	if absf(touch_input.y) > 0.05:
 		throttle = -touch_input.y
 
@@ -241,6 +253,7 @@ func _physics_process(delta: float) -> void:
 	var forward := -global_transform.basis.z
 	var forward_speed := linear_velocity.dot(forward)
 
+	# Двигатель.
 	if absf(throttle) > 0.05:
 		var can_accelerate := (
 			(throttle > 0.0 and forward_speed < max_speed)
@@ -253,6 +266,7 @@ func _physics_process(delta: float) -> void:
 				forward * throttle * engine_power * mass
 			)
 
+	# Тормоз.
 	if Input.is_action_pressed("jump"):
 		brake_timer = maxf(brake_timer, 0.05)
 
@@ -263,6 +277,7 @@ func _physics_process(delta: float) -> void:
 			-linear_velocity * brake_power * mass * 0.01
 		)
 
+	# Поворот.
 	var steering_factor := clampf(
 		absf(forward_speed) / 5.0,
 		0.0,
@@ -277,14 +292,16 @@ func _physics_process(delta: float) -> void:
 
 		apply_torque(
 			Vector3.UP
-			* steering
+			* -steering
 			* steering_power
 			* mass
 			* steering_factor
 			* reverse_factor
 		)
 
+	# Вращение визуальных колёс.
 	for wheel in wheel_nodes:
 		wheel.rotate_x(-forward_speed * delta * 0.7)
 
+	# Ограничение скорости.
 	linear_velocity = linear_velocity.limit_length(max_speed + 3.0)
