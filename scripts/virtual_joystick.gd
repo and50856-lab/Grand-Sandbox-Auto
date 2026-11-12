@@ -2,13 +2,13 @@ extends Control
 
 signal vector_changed(value: Vector2)
 
-@export var radius := 76.0
-@export var knob_radius := 31.0
+@export var radius: float = 76.0
+@export var knob_radius: float = 31.0
 
-var value := Vector2.ZERO
-var active_touch := -1
-var mouse_active := false
-var knob_position := Vector2.ZERO
+var value: Vector2 = Vector2.ZERO
+var active_touch: int = -1
+var mouse_active: bool = false
+var knob_position: Vector2 = Vector2.ZERO
 
 
 func _ready() -> void:
@@ -61,6 +61,7 @@ func _update_stick(pointer_position: Vector2) -> void:
 func _reset_stick() -> void:
 	value = Vector2.ZERO
 	knob_position = Vector2.ZERO
+
 	vector_changed.emit(value)
 	queue_redraw()
 
