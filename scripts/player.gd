@@ -23,12 +23,18 @@ var look_touch_id: int = -1
 var last_touch: Vector2 = Vector2.ZERO
 
 var in_vehicle: bool = false
-var current_vehicle: Node3D
+var current_vehicle: Node3D = null
+
+var saved_collision_layer: int = 1
+var saved_collision_mask: int = 1
 
 
 func _ready() -> void:
 	name = "Player"
 	add_to_group("player")
+
+	saved_collision_layer = collision_layer
+	saved_collision_mask = collision_mask
 
 	floor_snap_length = 0.35
 	floor_max_angle = deg_to_rad(50.0)
@@ -162,7 +168,7 @@ func _build_camera() -> void:
 	camera_pivot.add_child(camera)
 
 
-func _input(event: InputEvent) -> void:
+func _unhandled_input(event: InputEvent) -> void:
 	if in_vehicle:
 		return
 
@@ -358,10 +364,19 @@ func enter_vehicle(vehicle: Node3D) -> void:
 	if in_vehicle:
 		return
 
+	if not is_instance_valid(vehicle):
+		return
+
 	in_vehicle = true
 	current_vehicle = vehicle
+
 	velocity = Vector3.ZERO
 	touch_move = Vector2.ZERO
+
+	# Отключаем коллизию игрока,
+	# чтобы он не мешал физике автомобиля.
+	collision_layer = 0
+	collision_mask = 0
 
 	visible = false
 	camera.current = false
@@ -375,5 +390,9 @@ func exit_vehicle(position_out: Vector3) -> void:
 	current_vehicle = null
 	touch_move = Vector2.ZERO
 
+	# Восстанавливаем исходную коллизию.
+	collision_layer = saved_collision_layer
+	collision_mask = saved_collision_mask
+
 	visible = true
-	camera.current = true
+	camera.make_current()
