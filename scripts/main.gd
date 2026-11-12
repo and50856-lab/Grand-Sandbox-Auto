@@ -17,9 +17,9 @@ func _ready() -> void:
 	_show_main_menu()
 
 
-# --------------------------------------------------
+# ==================================================
 # INPUT
-# --------------------------------------------------
+# ==================================================
 
 func _setup_input() -> void:
 	_add_key_action("move_forward", KEY_W)
@@ -38,35 +38,29 @@ func _add_key_action(action: String, key: Key) -> void:
 	InputMap.action_add_event(action, event)
 
 
-# --------------------------------------------------
+# ==================================================
 # WORLD
-# --------------------------------------------------
+# ==================================================
 
 func _setup_world() -> void:
+	# Яркий фон вместо тёмного неба.
 	var world_environment := WorldEnvironment.new()
 	var environment := Environment.new()
 
-	environment.background_mode = Environment.BG_SKY
-	environment.sky = Sky.new()
-
-	var sky_material := ProceduralSkyMaterial.new()
-	sky_material.sky_top_color = Color(0.12, 0.32, 0.62)
-	sky_material.sky_horizon_color = Color(0.65, 0.78, 0.92)
-	sky_material.ground_bottom_color = Color(0.12, 0.16, 0.12)
-	sky_material.ground_horizon_color = Color(0.48, 0.57, 0.48)
-
-	environment.sky.sky_material = sky_material
+	environment.background_mode = Environment.BG_COLOR
+	environment.background_color = Color(0.35, 0.62, 0.88)
 	environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	environment.ambient_light_color = Color(0.65, 0.70, 0.78)
-	environment.ambient_light_energy = 0.8
+	environment.ambient_light_color = Color(0.8, 0.85, 1.0)
+	environment.ambient_light_energy = 1.0
 	environment.tonemap_mode = Environment.TONE_MAPPER_FILMIC
 
 	world_environment.environment = environment
 	add_child(world_environment)
 
+	# Солнце без теней — пока проверяем сам рендер.
 	var sun := DirectionalLight3D.new()
 	sun.rotation_degrees = Vector3(-48, -32, 0)
-	sun.light_energy = 1.2
+	sun.light_energy = 1.3
 	sun.shadow_enabled = false
 	add_child(sun)
 
@@ -76,110 +70,110 @@ func _setup_world() -> void:
 
 func _create_ground() -> void:
 	var ground := MeshInstance3D.new()
-	var mesh := PlaneMesh.new()
+	ground.name = "Ground"
 
+	var mesh := PlaneMesh.new()
 	mesh.size = Vector2(500, 500)
 	ground.mesh = mesh
+	ground.position.y = -0.02
 
 	var material := StandardMaterial3D.new()
-	material.albedo_color = Color(0.20, 0.34, 0.19)
+	material.albedo_color = Color(0.25, 0.48, 0.22)
 	material.roughness = 1.0
 	ground.material_override = material
 
 	add_child(ground)
 
 	var body := StaticBody3D.new()
+	body.name = "GroundCollision"
+
 	var collision := CollisionShape3D.new()
 	var shape := BoxShape3D.new()
-
 	shape.size = Vector3(500, 0.2, 500)
+
 	collision.shape = shape
-	collision.position.y = -0.1
+	collision.position.y = -0.12
 
 	body.add_child(collision)
 	add_child(body)
 
 
 func _create_test_location() -> void:
-	# ROAD
+	# ДОРОГА
 
-	var road := MeshInstance3D.new()
-	var road_mesh := PlaneMesh.new()
-	road_mesh.size = Vector2(14, 120)
-	road.mesh = road_mesh
-	road.position = Vector3(0, 0.025, -25)
+	_add_box(
+		"Road",
+		Vector3(14, 0.08, 120),
+		Vector3(0, 0.02, -25),
+		Color(0.12, 0.13, 0.15),
+		false
+	)
 
-	var road_material := StandardMaterial3D.new()
-	road_material.albedo_color = Color(0.12, 0.13, 0.15)
-	road_material.roughness = 1.0
-	road.material_override = road_material
-	add_child(road)
-
-	# ROAD MARKINGS
+	# РАЗМЕТКА
 
 	for i in range(12):
 		_add_box(
 			"RoadLine",
-			Vector3(0.22, 0.035, 3.0),
-			Vector3(0, 0.06, 24 - i * 9),
-			Color(0.95, 0.88, 0.55),
+			Vector3(0.22, 0.04, 3.0),
+			Vector3(0, 0.09, 24 - i * 9),
+			Color(1.0, 0.88, 0.45),
 			false
 		)
 
-	# BUILDINGS
+	# ЗДАНИЯ
 
 	_add_box(
 		"BuildingLeft",
 		Vector3(13, 9, 15),
 		Vector3(-19, 4.5, -24),
-		Color(0.48, 0.50, 0.53)
+		Color(0.55, 0.58, 0.62)
 	)
 
 	_add_box(
 		"BuildingRight",
 		Vector3(13, 12, 15),
 		Vector3(19, 6, -30),
-		Color(0.58, 0.43, 0.32)
+		Color(0.65, 0.43, 0.30)
 	)
 
 	_add_box(
 		"SmallBuilding",
 		Vector3(10, 6, 10),
 		Vector3(-25, 3, 7),
-		Color(0.42, 0.49, 0.56)
+		Color(0.40, 0.52, 0.65)
 	)
 
-	# TEST OBSTACLES
+	# ПРЕПЯТСТВИЯ
 
 	_add_box(
 		"Crate1",
 		Vector3(1.5, 1.5, 1.5),
 		Vector3(-4, 0.75, -5),
-		Color(0.55, 0.32, 0.15)
+		Color(0.65, 0.36, 0.16)
 	)
 
 	_add_box(
 		"Crate2",
 		Vector3(1.5, 1.5, 1.5),
 		Vector3(4, 0.75, -8),
-		Color(0.65, 0.42, 0.20)
+		Color(0.75, 0.48, 0.20)
 	)
 
 	_add_box(
 		"Barrier",
 		Vector3(5, 1, 0.8),
 		Vector3(0, 0.5, -15),
-		Color(0.85, 0.48, 0.12)
+		Color(0.95, 0.48, 0.10)
 	)
 
 	_add_box(
 		"Platform",
 		Vector3(5, 0.6, 5),
 		Vector3(9, 0.3, 3),
-		Color(0.35, 0.40, 0.46)
+		Color(0.40, 0.46, 0.55)
 	)
 
-	# TREES
+	# ДЕРЕВЬЯ
 
 	_add_tree(Vector3(-12, 0, -5))
 	_add_tree(Vector3(-15, 0, -15))
@@ -212,6 +206,7 @@ func _add_box(
 
 	if with_collision:
 		var body := StaticBody3D.new()
+		body.name = object_name + "Collision"
 		body.position = world_position
 
 		var collision := CollisionShape3D.new()
@@ -234,7 +229,7 @@ func _add_tree(world_position: Vector3) -> void:
 	trunk.position = world_position + Vector3(0, 1.25, 0)
 
 	var trunk_material := StandardMaterial3D.new()
-	trunk_material.albedo_color = Color(0.30, 0.19, 0.10)
+	trunk_material.albedo_color = Color(0.32, 0.19, 0.10)
 	trunk.material_override = trunk_material
 	add_child(trunk)
 
@@ -247,14 +242,14 @@ func _add_tree(world_position: Vector3) -> void:
 	leaves.position = world_position + Vector3(0, 3.0, 0)
 
 	var leaves_material := StandardMaterial3D.new()
-	leaves_material.albedo_color = Color(0.12, 0.35, 0.14)
+	leaves_material.albedo_color = Color(0.12, 0.40, 0.15)
 	leaves.material_override = leaves_material
 	add_child(leaves)
 
 
-# --------------------------------------------------
-# MENU
-# --------------------------------------------------
+# ==================================================
+# MAIN MENU
+# ==================================================
 
 func _show_main_menu() -> void:
 	_create_menu_layer()
@@ -271,7 +266,10 @@ func _show_main_menu() -> void:
 	var info := Label.new()
 	info.text = "ANDROID EDITION  •  PROTOTYPE 0.2"
 	info.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	info.add_theme_color_override("font_color", Color(0.55, 0.65, 0.75))
+	info.add_theme_color_override(
+		"font_color",
+		Color(0.60, 0.68, 0.78)
+	)
 	column.add_child(info)
 
 
@@ -330,25 +328,27 @@ func _build_menu_page(
 	var title := Label.new()
 	title.text = title_text
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size",  thirty_two())
-	title.add_theme_color_override("font_color", Color(0.94, 0.97, 1))
+	title.add_theme_font_size_override("font_size", 32)
+	title.add_theme_color_override(
+		"font_color",
+		Color(0.94, 0.97, 1.0)
+	)
 	column.add_child(title)
 
 	var subtitle := Label.new()
 	subtitle.text = subtitle_text
 	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	subtitle.add_theme_font_size_override("font_size", 15)
-	subtitle.add_theme_color_override("font_color", Color(0.40, 0.72, 1))
+	subtitle.add_theme_color_override(
+		"font_color",
+		Color(0.40, 0.72, 1.0)
+	)
 	column.add_child(subtitle)
 
 	var separator := HSeparator.new()
 	column.add_child(separator)
 
 	return column
-
-
-func thirty_two() -> int:
-	return 32
 
 
 func _add_menu_button(
@@ -433,6 +433,7 @@ func _show_settings() -> void:
 	fps_row.add_child(fps_label)
 
 	var fps := OptionButton.new()
+
 	for value in fps_values:
 		fps.add_item("Без ограничений" if value == 0 else str(value))
 
@@ -473,6 +474,7 @@ func _add_setting_option(
 	row.add_child(label)
 
 	var option := OptionButton.new()
+
 	for choice in choices:
 		option.add_item(choice)
 
@@ -488,9 +490,9 @@ func _clear_ui() -> void:
 		child.queue_free()
 
 
-# --------------------------------------------------
-# GAME
-# --------------------------------------------------
+# ==================================================
+# GAME START
+# ==================================================
 
 func _start_game(mode: String) -> void:
 	current_mode = mode
@@ -511,16 +513,22 @@ func _start_game(mode: String) -> void:
 	_create_touch_hud()
 
 
+# ==================================================
+# TOUCH HUD
+# ==================================================
+
 func _create_touch_hud() -> void:
 	var root := Control.new()
 	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hud_layer.add_child(root)
 
-	# JOYSTICK
+	# ЛЕВЫЙ ДЖОЙСТИК
 
 	var joystick = VirtualJoystickScript.new()
-	joystick.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT)
+	joystick.set_anchors_and_offsets_preset(
+		Control.PRESET_BOTTOM_LEFT
+	)
 	joystick.position = Vector2(35, -220)
 	joystick.size = Vector2(190, 190)
 
@@ -531,11 +539,13 @@ func _create_touch_hud() -> void:
 
 	root.add_child(joystick)
 
-	# JUMP BUTTON
+	# ПРЫЖОК
 
 	var jump := Button.new()
 	jump.text = "ПРЫЖОК"
-	jump.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT)
+	jump.set_anchors_and_offsets_preset(
+		Control.PRESET_BOTTOM_RIGHT
+	)
 	jump.position = Vector2(-180, -120)
 	jump.size = Vector2(150, 76)
 	jump.add_theme_font_size_override("font_size", 18)
@@ -550,11 +560,13 @@ func _create_touch_hud() -> void:
 
 	root.add_child(jump)
 
-	# RETURN TO MENU
+	# ВОЗВРАТ В МЕНЮ
 
 	var exit_button := Button.new()
 	exit_button.text = "МЕНЮ"
-	exit_button.set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT)
+	exit_button.set_anchors_and_offsets_preset(
+		Control.PRESET_TOP_LEFT
+	)
 	exit_button.position = Vector2(24, 24)
 	exit_button.size = Vector2(120, 54)
 
