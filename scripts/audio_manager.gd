@@ -1,99 +1,164 @@
 extends Node
 
-const SAMPLE_RATE := 22050.0
+const SAVE_PATH := "user://settings.cfg"
 
-var ambient_player: AudioStreamPlayer
-var engine_player: AudioStreamPlayer
-
-var ambient_playback: AudioStreamGeneratorPlayback
-var engine_playback: AudioStreamGeneratorPlayback
-
-var ambient_phase := 0.0
-var engine_phase := 0.0
-
-var engine_frequency := 45.0
-var engine_volume := 0.0
-var master_volume := 1.0
+var graphics_quality: int = 1
+var texture_quality: int = 2
+var shadow_quality: int = 0
+var view_distance: float = 180.0
+var npc_amount: int = 2
+var physics_quality: int = 2
+var target_fps: int = 60
+var language: String = "ru"
 
 
 func _ready() -> void:
-	add_to_group("audio_manager")
-
-	ambient_player = _create_player(0.16)
-	engine_player = _create_player(0.22)
-
-	ambient_playback = ambient_player.get_stream_playback() as AudioStreamGeneratorPlayback
-	engine_playback = engine_player.get_stream_playback() as AudioStreamGeneratorPlayback
+	_ensure_input_actions()
+	load_settings()
+	apply_settings()
 
 
-func _create_player(volume: float) -> AudioStreamPlayer:
-	var player := AudioStreamPlayer.new()
-	var generator := AudioStreamGenerator.new()
-
-	generator.mix_rate = SAMPLE_RATE
-	generator.buffer_length = 0.25
-
-	player.stream = generator
-	player.volume_db = linear_to_db(volume)
-	add_child(player)
-	player.play()
-
-	return player
+func _ensure_input_actions() -> void:
+	_add_action("move_left", [KEY_A, KEY_LEFT])
+	_add_action("move_right", [KEY_D, KEY_RIGHT])
+	_add_action("move_forward", [KEY_W, KEY_UP])
+	_add_action("move_back", [KEY_S, KEY_DOWN])
+	_add_action("jump", [KEY_SPACE])
+	_add_action("run", [KEY_SHIFT])
 
 
-func set_engine_speed(speed: float) -> void:
-	var normalized_speed := clampf(speed / 35.0, 0.0, 1.0)
+func _add_action(action_name: String, keys: Array) -> void:
+	if not InputMap.has_action(action_name):
+		InputMap.add_action(action_name)
 
-	engine_frequency = 42.0 + normalized_speed * 145.0
-	engine_volume = 0.08 + normalized_speed * 0.62
+	for keycode in keys:
+		var exists := false
 
+		for existing_event in InputMap.action_get_events(action_name):
+			if existing_event is InputEventKey:
+				if existing_event.physical_keycode == int(keycode):
+					exists = true
+					break
 
-func stop_engine() -> void:
-	engine_volume = move_toward(engine_volume, 0.0, 0.08)
+		if exists:
+			continue
 
-
-func set_master_volume(value: float) -> void:
-	master_volume = clampf(value, 0.0, 1.0)
-
-	if is_instance_valid(ambient_player):
-		ambient_player.volume_db = linear_to_db(maxf(0.001, 0.16 * master_volume))
-
-	if is_instance_valid(engine_player):
-		engine_player.volume_db = linear_to_db(maxf(0.001, 0.22 * master_volume))
-
-
-func _process(_delta: float) -> void:
-	if is_instance_valid(ambient_playback):
-		_fill_ambient()
-
-	if is_instance_valid(engine_playback):
-		_fill_engine()
+		var event := InputEventKey.new()
+		event.physical_keycode = int(keycode)
+		InputMap.action_add_event(action_name, event)
 
 
-func _fill_ambient() -> void:
-	var frames := ambient_playback.get_frames_available()
+func apply_settings() -> void:
+	Engine.max_fps = target_fps
 
-	for i in range(frames):
-		ambient_phase += TAU * 58.0 / SAMPLE_RATE
+	var viewport := get_viewport()
 
-		if ambient_phase >= TAU:
-			ambient_phase -= TAU
+	if viewport == null:
+		return
 
-		var sample := sin(ambient_phase) * 0.012
-		ambient_playback.push_frame(Vector2(sample, sample))
+	match graphics_quality:
+		1:
+			viewport.msaa_3d = Viewport.MSAA_DISABLED
+			viewport.scaling_3d_scale = 0.75
+		2:
+			viewport.msaa_3d = Viewport.MSAA_2X
+			viewport.scaling_3d_scale = 0.9
+		3:
+			viewport.msaa_3d = Viewport.MSAA_4X
+			viewport.scaling_3d_scale = 1.0
+
+	match texture_quality:
+		1:
+			viewport.texture_mipmap_bias = 1.5
+		2:
+			viewport.texture_mipmap_bias = 0.0
+		3:
+			viewport.texture_mipmap_bias = -0.5
+
+	for sun in get_tree().get_nodes_in_group("world_sun"):
+		if not sun is DirectionalLight3D:
+			continue
+
+		var light := sun as DirectionalLight3D
+
+		match shadow_quality:
+			0:
+				light.shadow_enabled = false
+			1:
+				light.shadow_enabled = true
+				light.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS
+				light.directional_shadow_max_distance = 60.0
+			2:
+				light.shadow_enabled = true
+				light.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS
+				light.directional_shadow_max_distance = 180.0
 
 
-func _fill_engine() -> void:
-	var frames := engine_playback.get_frames_available()
+func save_settings() -> void:
+	var cfg := ConfigFile.new()
 
-	for i in range(frames):
-		engine_phase += TAU * engine_frequency / SAMPLE_RATE
+	cfg.set_value("graphics", "quality", graphics_quality)
+	cfg.set_value("graphics", "textures", texture_quality)
+	cfg.set_value("graphics", "shadows", shadow_quality)
+	cfg.set_value("graphics", "view_distance", view_distance)
 
-		if engine_phase >= TAU:
-			engine_phase -= TAU
+	cfg.set_value("gameplay", "npcs", npc_amount)
+	cfg.set_value("gameplay", "physics", physics_quality)
 
-		var fundamental := sin(engine_phase)
-		var harmonic := sin(engine_phase * 2.0) * 0.35
-		var sample := (fundamental + harmonic) * engine_volume * 0.12
+	cfg.set_value("display", "fps", target_fps)
+	cfg.set_value("display", "language", language)
 
-		engine_playback.push_frame(Vector2(sample, sample))
+	var result := cfg.save(SAVE_PATH)
+
+	if result != OK:
+		push_warning("Не удалось сохранить настройки: %s" % result)
+
+
+func load_settings() -> void:
+	var cfg := ConfigFile.new()
+
+	if cfg.load(SAVE_PATH) != OK:
+		return
+
+	graphics_quality = clampi(
+		int(cfg.get_value("graphics", "quality", 1)),
+		1,
+		3
+	)
+
+	texture_quality = clampi(
+		int(cfg.get_value("graphics", "textures", 2)),
+		1,
+		3
+	)
+
+	shadow_quality = clampi(
+		int(cfg.get_value("graphics", "shadows", 0)),
+		0,
+		2
+	)
+
+	view_distance = clampf(
+		float(cfg.get_value("graphics", "view_distance", 180.0)),
+		80.0,
+		500.0
+	)
+
+	npc_amount = clampi(
+		int(cfg.get_value("gameplay", "npcs", 2)),
+		0,
+		10
+	)
+
+	physics_quality = clampi(
+		int(cfg.get_value("gameplay", "physics", 2)),
+		1,
+		3
+	)
+
+	target_fps = int(cfg.get_value("display", "fps", 60))
+
+	if not [30, 45, 60, 90, 120].has(target_fps):
+		target_fps = 60
+
+	language = str(cfg.get_value("display", "language", "ru"))
