@@ -1,12 +1,13 @@
 extends Node3D
 
+const VirtualJoystickScript = preload("res://scripts/virtual_joystick.gd")
+
 var player: CharacterBody3D
 var menu_layer: CanvasLayer
 var world_started := false
 var current_mode := "sandbox"
 
 var ui_root: Control
-var settings_panel: PanelContainer
 
 func _ready() -> void:
 	_setup_input()
@@ -23,6 +24,7 @@ func _setup_input() -> void:
 func _add_key_action(action: String, key: Key) -> void:
 	if not InputMap.has_action(action):
 		InputMap.add_action(action)
+
 	var event := InputEventKey.new()
 	event.physical_keycode = key
 	InputMap.action_add_event(action, event)
@@ -30,6 +32,7 @@ func _add_key_action(action: String, key: Key) -> void:
 func _setup_world() -> void:
 	var world_environment := WorldEnvironment.new()
 	var environment := Environment.new()
+
 	environment.background_mode = Environment.BG_SKY
 	environment.sky = Sky.new()
 	environment.sky.sky_material = ProceduralSkyMaterial.new()
@@ -37,6 +40,7 @@ func _setup_world() -> void:
 	environment.ambient_light_color = Color(0.55, 0.62, 0.78)
 	environment.ambient_light_energy = 0.7
 	environment.tonemap_mode = Environment.TONE_MAPPER_FILMIC
+
 	world_environment.environment = environment
 	add_child(world_environment)
 
@@ -61,9 +65,11 @@ func _setup_world() -> void:
 	var ground_body := StaticBody3D.new()
 	var ground_collision := CollisionShape3D.new()
 	var ground_shape := BoxShape3D.new()
+
 	ground_shape.size = Vector3(500, 0.2, 500)
 	ground_collision.shape = ground_shape
 	ground_collision.position.y = -0.1
+
 	ground_body.add_child(ground_collision)
 	add_child(ground_body)
 
@@ -105,7 +111,12 @@ func _show_main_menu() -> void:
 	info.add_theme_color_override("font_color", Color(0.55, 0.6, 0.68))
 	ui_root.add_child(info)
 
-func _add_menu_button(label_text: String, pos: Vector2, button_size: Vector2, callback: Callable) -> void:
+func _add_menu_button(
+	label_text: String,
+	pos: Vector2,
+	button_size: Vector2,
+	callback: Callable
+) -> void:
 	var button := Button.new()
 	button.text = label_text
 	button.position = pos
@@ -123,9 +134,26 @@ func _show_mode_menu() -> void:
 	title.add_theme_font_size_override("font_size", 38)
 	ui_root.add_child(title)
 
-	_add_menu_button("SANDBOX\nСвободный мир", Vector2(80, 220), Vector2(390, 190), func(): _start_game("sandbox"))
-	_add_menu_button("CHALLENGES\nИспытания физики", Vector2(510, 220), Vector2(390, 190), func(): _start_game("challenges"))
-	_add_menu_button("НАЗАД", Vector2(80, 460), Vector2(240, 60), _show_main_menu)
+	_add_menu_button(
+		"SANDBOX\nСвободный мир",
+		Vector2(80, 220),
+		Vector2(390, 190),
+		func(): _start_game("sandbox")
+	)
+
+	_add_menu_button(
+		"CHALLENGES\nИспытания физики",
+		Vector2(510, 220),
+		Vector2(390, 190),
+		func(): _start_game("challenges")
+	)
+
+	_add_menu_button(
+		"НАЗАД",
+		Vector2(80, 460),
+		Vector2(240, 60),
+		_show_main_menu
+	)
 
 func _show_settings() -> void:
 	_clear_ui()
@@ -142,27 +170,67 @@ func _show_settings() -> void:
 	panel.add_theme_constant_override("separation", 13)
 	ui_root.add_child(panel)
 
-	_add_option(panel, "Графика", ["Очень низкая", "Низкая", "Средняя", "Высокая", "Ультра"], Settings.graphics_quality, func(v): Settings.graphics_quality = v + 1)
-	_add_option(panel, "Текстуры", ["Очень низкие", "Низкие", "Средние", "Высокие", "Ультра"], Settings.texture_quality, func(v): Settings.texture_quality = v + 1)
-	_add_option(panel, "Тени", ["Выкл.", "Очень низкие", "Низкие", "Средние", "Высокие", "Ультра"], Settings.shadow_quality, func(v): Settings.shadow_quality = v)
-	_add_option(panel, "NPC", ["Мало", "Средне", "Реалистично"], Settings.npc_amount, func(v): Settings.npc_amount = v)
-	_add_option(panel, "Физика", ["Лёгкая", "Средняя", "Высокая", "Максимальная"], Settings.physics_quality, func(v): Settings.physics_quality = v)
+	_add_option(
+		panel,
+		"Графика",
+		["Очень низкая", "Низкая", "Средняя", "Высокая", "Ультра"],
+		Settings.graphics_quality - 1,
+		func(v): Settings.graphics_quality = v + 1
+	)
+
+	_add_option(
+		panel,
+		"Текстуры",
+		["Очень низкие", "Низкие", "Средние", "Высокие", "Ультра"],
+		Settings.texture_quality - 1,
+		func(v): Settings.texture_quality = v + 1
+	)
+
+	_add_option(
+		panel,
+		"Тени",
+		["Выкл.", "Очень низкие", "Низкие", "Средние", "Высокие", "Ультра"],
+		Settings.shadow_quality,
+		func(v): Settings.shadow_quality = v
+	)
+
+	_add_option(
+		panel,
+		"NPC",
+		["Мало", "Средне", "Реалистично"],
+		Settings.npc_amount,
+		func(v): Settings.npc_amount = v
+	)
+
+	_add_option(
+		panel,
+		"Физика",
+		["Лёгкая", "Средняя", "Высокая", "Максимальная"],
+		Settings.physics_quality,
+		func(v): Settings.physics_quality = v
+	)
 
 	var fps_row := HBoxContainer.new()
 	panel.add_child(fps_row)
+
 	var fps_label := Label.new()
 	fps_label.text = "Ограничение FPS"
 	fps_label.custom_minimum_size.x = 250
 	fps_row.add_child(fps_label)
 
 	var fps := OptionButton.new()
-	for value in [15, 30, 60, 120, 144, 165, 185, 240, 0]:
+	var fps_values := [15, 30, 60, 120, 144, 165, 185, 240, 0]
+
+	for value in fps_values:
 		fps.add_item("Без ограничений" if value == 0 else str(value))
-	fps.select(2 if Settings.target_fps == 60 else 0)
+
+	var selected_fps := fps_values.find(Settings.target_fps)
+	fps.select(selected_fps if selected_fps >= 0 else 2)
+
 	fps.item_selected.connect(func(index):
-		var values = [15, 30, 60, 120, 144, 165, 185, 240, 0]
-		Settings.target_fps = values[index]
+		Settings.target_fps = fps_values[index]
 	)
+
 	fps_row.add_child(fps)
 
 	var distance_label := Label.new()
@@ -175,19 +243,31 @@ func _show_settings() -> void:
 	distance.step = 100
 	distance.value = Settings.view_distance
 	distance.custom_minimum_size.x = 650
+
 	distance.value_changed.connect(func(v):
 		Settings.view_distance = v
 		distance_label.text = "Дальность прорисовки: " + str(int(v)) + " м"
 	)
+
 	panel.add_child(distance)
 
-	_add_menu_button("СОХРАНИТЬ И НАЗАД", Vector2(80, 600), Vector2(380, 65), func():
-		Settings.save_settings()
-		Settings.apply_settings()
-		_show_main_menu()
+	_add_menu_button(
+		"СОХРАНИТЬ И НАЗАД",
+		Vector2(80, 600),
+		Vector2(380, 65),
+		func():
+			Settings.save_settings()
+			Settings.apply_settings()
+			_show_main_menu()
 	)
 
-func _add_option(parent: VBoxContainer, label_text: String, choices: Array, selected: int, callback: Callable) -> void:
+func _add_option(
+	parent: VBoxContainer,
+	label_text: String,
+	choices: Array,
+	selected: int,
+	callback: Callable
+) -> void:
 	var row := HBoxContainer.new()
 	parent.add_child(row)
 
@@ -197,8 +277,10 @@ func _add_option(parent: VBoxContainer, label_text: String, choices: Array, sele
 	row.add_child(label)
 
 	var option := OptionButton.new()
+
 	for choice in choices:
 		option.add_item(choice)
+
 	option.select(clampi(selected, 0, choices.size() - 1))
 	option.item_selected.connect(callback)
 	row.add_child(option)
@@ -210,6 +292,7 @@ func _clear_ui() -> void:
 func _start_game(mode: String) -> void:
 	current_mode = mode
 	world_started = true
+
 	menu_layer.queue_free()
 
 	player = CharacterBody3D.new()
@@ -219,6 +302,7 @@ func _start_game(mode: String) -> void:
 
 	var hud := CanvasLayer.new()
 	add_child(hud)
+
 	_create_touch_hud(hud)
 
 func _create_touch_hud(hud: CanvasLayer) -> void:
@@ -226,39 +310,47 @@ func _create_touch_hud(hud: CanvasLayer) -> void:
 	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	hud.add_child(root)
 
-	var controls := HBoxContainer.new()
-	controls.position = Vector2(35, 650)
-	controls.add_theme_constant_override("separation", 8)
-	root.add_child(controls)
+	# ЛЕВЫЙ ВИРТУАЛЬНЫЙ ДЖОЙСТИК
 
-	for item in [
-		["◀", Vector2(-1, 0)],
-		["▲", Vector2(0, -1)],
-		["▼", Vector2(0, 1)],
-		["▶", Vector2(1, 0)]
-	]:
-		var button := Button.new()
-		button.text = item[0]
-		button.custom_minimum_size = Vector2(75, 75)
-		button.button_down.connect(func(): player.touch_move = item[1])
-		button.button_up.connect(func(): player.touch_move = Vector2.ZERO)
-		controls.add_child(button)
+	var joystick := Control.new()
+	joystick.set_script(VirtualJoystickScript)
+	joystick.position = Vector2(65, 760)
+	joystick.size = Vector2(220, 220)
+	joystick.vector_changed.connect(func(value: Vector2):
+		if is_instance_valid(player):
+			player.touch_move = value
+	)
+	root.add_child(joystick)
+
+	# ПРЫЖОК
 
 	var jump := Button.new()
 	jump.text = "ПРЫЖОК"
-	jump.position = Vector2(1600, 650)
-	jump.size = Vector2(170, 85)
-	jump.pressed.connect(func(): Input.action_press("jump"))
-	jump.button_up.connect(func(): Input.action_release("jump"))
+	jump.position = Vector2(1640, 820)
+	jump.size = Vector2(190, 100)
+	jump.add_theme_font_size_override("font_size", 22)
+
+	jump.button_down.connect(func():
+		Input.action_press("jump")
+	)
+
+	jump.button_up.connect(func():
+		Input.action_release("jump")
+	)
+
 	root.add_child(jump)
+
+	# ВЫХОД В МЕНЮ
 
 	var exit_button := Button.new()
 	exit_button.text = "МЕНЮ"
 	exit_button.position = Vector2(30, 25)
 	exit_button.size = Vector2(130, 55)
+
 	exit_button.pressed.connect(func():
 		get_tree().reload_current_scene()
 	)
+
 	root.add_child(exit_button)
 
 func _exit_game() -> void:
