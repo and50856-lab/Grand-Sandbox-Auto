@@ -9,6 +9,7 @@ const JOYSTICK_SCRIPT = preload("res://scripts/virtual_joystick.gd")
 const WORLD_SIZE := 420.0
 const ROAD_WIDTH := 12.0
 const BUILDING_SPACING := 42.0
+const TREE_COUNT := 36
 
 var player: CharacterBody3D
 var joystick: Control
@@ -33,7 +34,7 @@ func _process(_delta: float) -> void:
 		return
 
 	if is_instance_valid(player):
-		var in_vehicle := player.get("in_vehicle") == true
+		var in_vehicle: bool = player.get("in_vehicle") == true
 
 		if is_instance_valid(interact_button):
 			interact_button.text = "Выйти из машины" if in_vehicle else "Взаимодействие"
@@ -42,12 +43,13 @@ func _process(_delta: float) -> void:
 			status_label.text = "В машине" if in_vehicle else "ПЕШЕХОД"
 
 
-# --------------------------------------------------
+# ==================================================
 # ГЛАВНОЕ МЕНЮ
-# --------------------------------------------------
+# ==================================================
 
 func _show_main_menu() -> void:
 	_clear_layer(menu_layer)
+
 	menu_layer = CanvasLayer.new()
 	menu_layer.layer = 10
 	add_child(menu_layer)
@@ -86,7 +88,11 @@ func _show_main_menu() -> void:
 	_add_menu_button(column, "ВЫХОД", _exit_game)
 
 
-func _add_menu_button(parent: VBoxContainer, caption: String, callback: Callable) -> void:
+func _add_menu_button(
+	parent: VBoxContainer,
+	caption: String,
+	callback: Callable
+) -> void:
 	var button := Button.new()
 	button.text = caption
 	button.custom_minimum_size = Vector2(0, 54)
@@ -99,9 +105,9 @@ func _exit_game() -> void:
 	get_tree().quit()
 
 
-# --------------------------------------------------
+# ==================================================
 # ЗАПУСК ИГРЫ
-# --------------------------------------------------
+# ==================================================
 
 func _start_game() -> void:
 	if game_started:
@@ -129,19 +135,21 @@ func _create_player() -> void:
 	player.global_position = Vector3(0, 1.5, 0)
 
 
-# --------------------------------------------------
+# ==================================================
 # МИР
-# --------------------------------------------------
+# ==================================================
 
 func _create_world() -> void:
 	var environment := WorldEnvironment.new()
 	var env := Environment.new()
+
 	env.background_mode = Environment.BG_SKY
 	env.sky = Sky.new()
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 	env.ambient_light_color = Color(0.65, 0.72, 0.85)
 	env.ambient_light_energy = 0.65
 	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
+
 	environment.environment = env
 	add_child(environment)
 
@@ -200,7 +208,6 @@ func _create_roads() -> void:
 			road_material
 		)
 
-		# Несколько коротких дорожных отметок вместо сотен отдельных объектов.
 		for mark in range(-4, 5):
 			_add_box_visual(
 				"Mark_X_%d_%d" % [i, mark],
@@ -237,13 +244,11 @@ func _create_buildings() -> void:
 			)
 
 			var height := 10.0 + float((abs(x * 7 + z * 3)) % 4) * 3.0
-			var width := 17.0
-			var depth := 17.0
 
 			_add_building(
 				"Building_%d_%d" % [x, z],
 				position,
-				Vector3(width, height, depth),
+				Vector3(17.0, height, 17.0),
 				building_materials[abs(x + z) % building_materials.size()]
 			)
 
@@ -284,18 +289,15 @@ func _create_trees() -> void:
 	crown_mesh.radius = 1.5
 	crown_mesh.height = 3.0
 
-	var trunk_material := _make_material(Color(0.28, 0.17, 0.10))
-	var crown_material := _make_material(Color(0.12, 0.34, 0.14))
-
 	var trunk_multi := MultiMesh.new()
 	trunk_multi.transform_format = MultiMesh.TRANSFORM_3D
 	trunk_multi.mesh = trunk_mesh
-	trunk_multi.instance_count = 48
+	trunk_multi.instance_count = TREE_COUNT
 
 	var crown_multi := MultiMesh.new()
 	crown_multi.transform_format = MultiMesh.TRANSFORM_3D
 	crown_multi.mesh = crown_mesh
-	crown_multi.instance_count = 48
+	crown_multi.instance_count = TREE_COUNT
 
 	var index := 0
 
@@ -303,6 +305,9 @@ func _create_trees() -> void:
 		for z in range(-3, 4):
 			if x == 0 or z == 0:
 				continue
+
+			if index >= TREE_COUNT:
+				break
 
 			var px := float(x) * BUILDING_SPACING + 8.0
 			var pz := float(z) * BUILDING_SPACING + 8.0
@@ -319,26 +324,24 @@ func _create_trees() -> void:
 			)
 
 			index += 1
-			if index >= 48:
-				break
 
-		if index >= 48:
+		if index >= TREE_COUNT:
 			break
 
 	var trunk_instance := MultiMeshInstance3D.new()
 	trunk_instance.multimesh = trunk_multi
-	trunk_instance.material_override = trunk_material
+	trunk_instance.material_override = _make_material(Color(0.28, 0.17, 0.10))
 	add_child(trunk_instance)
 
 	var crown_instance := MultiMeshInstance3D.new()
 	crown_instance.multimesh = crown_multi
-	crown_instance.material_override = crown_material
+	crown_instance.material_override = _make_material(Color(0.12, 0.34, 0.14))
 	add_child(crown_instance)
 
 
-# --------------------------------------------------
+# ==================================================
 # ТРАНСПОРТ И ОБЪЕКТЫ
-# --------------------------------------------------
+# ==================================================
 
 func _create_vehicles() -> void:
 	var positions: Array[Vector3] = [
@@ -357,7 +360,7 @@ func _create_vehicles() -> void:
 
 
 func _create_npcs() -> void:
-	var count := clampi(Settings.npc_amount, 0, 10)
+	var count: int = clampi(Settings.npc_amount, 0, 10)
 
 	for i in range(count):
 		var npc := CharacterBody3D.new()
@@ -413,9 +416,9 @@ func _make_material(color: Color) -> StandardMaterial3D:
 	return material
 
 
-# --------------------------------------------------
+# ==================================================
 # HUD И УПРАВЛЕНИЕ
-# --------------------------------------------------
+# ==================================================
 
 func _create_hud() -> void:
 	hud_layer = CanvasLayer.new()
@@ -512,20 +515,26 @@ func _return_to_menu() -> void:
 		player = null
 
 	for child in get_children():
+		var child_name := str(child.name)
+
 		if child is WorldEnvironment or child is DirectionalLight3D:
 			child.queue_free()
-		elif child.name == "Ground" or child.name.begins_with("Road_") \
-		or child.name.begins_with("Mark_") or child.name.begins_with("Building_") \
-		or child is MultiMeshInstance3D or child.name.begins_with("Vehicle_") \
-		or child.name.begins_with("NPC_") or child.name.begins_with("PhysicsProp_"):
+		elif child_name == "Ground" \
+		or child_name.begins_with("Road_") \
+		or child_name.begins_with("Mark_") \
+		or child_name.begins_with("Building_") \
+		or child is MultiMeshInstance3D \
+		or child_name.begins_with("Vehicle_") \
+		or child_name.begins_with("NPC_") \
+		or child_name.begins_with("PhysicsProp_"):
 			child.queue_free()
 
 	_show_main_menu()
 
 
-# --------------------------------------------------
+# ==================================================
 # НАСТРОЙКИ
-# --------------------------------------------------
+# ==================================================
 
 func _show_settings() -> void:
 	_clear_layer(settings_layer)
@@ -557,11 +566,40 @@ func _show_settings() -> void:
 	title.add_theme_font_size_override("font_size", 25)
 	column.add_child(title)
 
-	_add_option(column, "Графика", ["Низкая", "Средняя", "Высокая"], Settings.graphics_quality - 1, _set_graphics)
-	_add_option(column, "Тени", ["Выкл.", "Низкие", "Высокие"], Settings.shadow_quality, _set_shadows)
-	_add_option(column, "Дальность", ["80 м", "120 м", "180 м", "250 м"], _distance_index(), _set_distance)
-	_add_option(column, "NPC", ["0", "2", "4", "6", "10"], _npc_index(), _set_npcs)
-	_add_option(column, "FPS", ["30", "45", "60", "90", "120"], _fps_index(), _set_fps)
+	_add_option(
+		column, "Графика",
+		["Низкая", "Средняя", "Высокая"],
+		Settings.graphics_quality - 1,
+		_set_graphics
+	)
+
+	_add_option(
+		column, "Тени",
+		["Выкл.", "Низкие", "Высокие"],
+		Settings.shadow_quality,
+		_set_shadows
+	)
+
+	_add_option(
+		column, "Дальность",
+		["80 м", "120 м", "180 м", "250 м"],
+		_distance_index(),
+		_set_distance
+	)
+
+	_add_option(
+		column, "NPC",
+		["0", "2", "4", "6", "10"],
+		_npc_index(),
+		_set_npcs
+	)
+
+	_add_option(
+		column, "FPS",
+		["30", "45", "60", "90", "120"],
+		_fps_index(),
+		_set_fps
+	)
 
 	_add_menu_button(column, "СОХРАНИТЬ", _save_settings)
 	_add_menu_button(column, "НАЗАД", _close_settings)
@@ -582,6 +620,7 @@ func _add_option(
 	row.add_child(label)
 
 	var option := OptionButton.new()
+
 	for item in options:
 		option.add_item(str(item))
 
@@ -601,51 +640,65 @@ func _set_shadows(index: int) -> void:
 
 
 func _set_distance(index: int) -> void:
-	var distances := [80.0, 120.0, 180.0, 250.0]
+	var distances: Array[float] = [80.0, 120.0, 180.0, 250.0]
 	Settings.view_distance = distances[index]
 	_apply_graphics_settings()
 
 
 func _set_npcs(index: int) -> void:
-	var amounts := [0, 2, 4, 6, 10]
+	var amounts: Array[int] = [0, 2, 4, 6, 10]
 	Settings.npc_amount = amounts[index]
 
 
 func _set_fps(index: int) -> void:
-	var values := [30, 45, 60, 90, 120]
+	var values: Array[int] = [30, 45, 60, 90, 120]
 	Settings.target_fps = values[index]
 	_apply_graphics_settings()
 
 
 func _distance_index() -> int:
-	var distances := [80.0, 120.0, 180.0, 250.0]
+	var distances: Array[float] = [80.0, 120.0, 180.0, 250.0]
 	var closest := 0
+
 	for i in range(distances.size()):
-		if absf(Settings.view_distance - distances[i]) < absf(Settings.view_distance - distances[closest]):
+		if absf(Settings.view_distance - distances[i]) < absf(
+			Settings.view_distance - distances[closest]
+		):
 			closest = i
+
 	return closest
 
 
 func _npc_index() -> int:
-	var amounts := [0, 2, 4, 6, 10]
+	var amounts: Array[int] = [0, 2, 4, 6, 10]
 	return amounts.find(Settings.npc_amount) if amounts.has(Settings.npc_amount) else 1
 
 
 func _fps_index() -> int:
-	var values := [30, 45, 60, 90, 120]
+	var values: Array[int] = [30, 45, 60, 90, 120]
 	return values.find(Settings.target_fps) if values.has(Settings.target_fps) else 2
 
 
 func _apply_graphics_settings() -> void:
 	if is_instance_valid(player):
-		var player_camera := player.get("camera") as Camera3D
-		if is_instance_valid(player_camera):
+		var camera_value: Variant = player.get("camera")
+
+		if camera_value is Camera3D:
+			var player_camera: Camera3D = camera_value
 			player_camera.far = Settings.view_distance
 
-	if is_instance_valid(hud_layer):
-		var viewport := get_viewport()
-		if viewport:
-			viewport.msaa_3d = Viewport.MSAA_DISABLED if Settings.graphics_quality == 1 else Viewport.MSAA_2X
+	var viewport := get_viewport()
+
+	if viewport:
+		match Settings.graphics_quality:
+			1:
+				viewport.msaa_3d = Viewport.MSAA_DISABLED
+			2:
+				viewport.msaa_3d = Viewport.MSAA_2X
+			3:
+				viewport.msaa_3d = Viewport.MSAA_4X
+			_:
+				viewport.msaa_3d = Viewport.MSAA_DISABLED
 
 	for node in get_tree().get_nodes_in_group("vehicles"):
 		if node.has_method("apply_settings"):
