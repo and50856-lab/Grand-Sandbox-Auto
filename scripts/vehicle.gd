@@ -19,10 +19,12 @@ var previous_speed := 0.0
 
 func _ready() -> void:
 	add_to_group("vehicles")
+
 	mass = 1150.0
 	gravity_scale = 1.0
 	linear_damp = 0.15
 	angular_damp = 2.0
+
 	_build_body()
 	_build_wheels()
 	_build_camera()
@@ -150,6 +152,12 @@ func exit_vehicle(player: Node3D) -> void:
 
 	driver = null
 
+	# Выключаем звук двигателя при выходе.
+	var audio_nodes := get_tree().get_nodes_in_group("audio_manager")
+
+	if audio_nodes.size() > 0:
+		audio_nodes[0].stop_engine()
+
 
 func _physics_process(delta: float) -> void:
 	if not driving:
@@ -167,20 +175,25 @@ func _physics_process(delta: float) -> void:
 	var forward := -global_transform.basis.z
 	var speed := linear_velocity.dot(forward)
 
+	# Звук двигателя зависит от скорости.
+	var audio_nodes := get_tree().get_nodes_in_group("audio_manager")
+
+	if audio_nodes.size() > 0:
+		audio_nodes[0].set_engine_speed(speed)
+
 	if absf(speed) < max_speed:
 		apply_central_force(forward * input * engine_power * mass)
 
+	# Торможение кнопкой прыжка.
 	if Input.is_action_pressed("jump"):
 		apply_central_force(-linear_velocity.normalized() * brake_power * mass)
 
 	var steer_factor := clampf(absf(speed) / 8.0, 0.15, 1.0)
 	apply_torque(Vector3.UP * steering * steering_power * mass * steer_factor)
 
-	# Визуальное вращение колёс.
 	for wheel in wheel_nodes:
 		wheel.rotate_x(-speed * delta * 0.7)
 
-	# Сильный удар отнимает прочность.
 	var current_speed := linear_velocity.length()
 
 	if current_speed - previous_speed > 9.0:
