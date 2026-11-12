@@ -1,6 +1,7 @@
 extends CharacterBody3D
 
-@export var move_speed := 6.0
+@export var walk_speed := 3.0
+@export var run_speed := 6.0
 @export var acceleration := 18.0
 @export var jump_force := 5.5
 @export var mouse_sensitivity := 0.004
@@ -8,12 +9,13 @@ extends CharacterBody3D
 var gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity")
 var camera_yaw := 0.0
 var camera_pitch := -0.15
-var touch_move := Vector2.ZERO
-var look_touch_id := -1
-var last_touch := Vector2.ZERO
 
+var touch_move := Vector2.ZERO
 var camera_pivot: Node3D
 var camera: Camera3D
+
+var look_touch_id := -1
+var last_touch := Vector2.ZERO
 
 func _ready() -> void:
 	floor_snap_length = 0.3
@@ -30,14 +32,13 @@ func _build_character() -> void:
 	add_child(collision)
 
 	var model_scene: PackedScene = load("res://assets/character.glb")
+
 	if model_scene:
 		var model := model_scene.instantiate()
 		model.name = "PlayerModel"
-		model.position.y = 0.0
-		model.scale = Vector3.ONE
 		add_child(model)
 	else:
-		push_error("Не найдена модель res://assets/character.glb")
+		push_error("Не найдена модель character.glb")
 
 func _build_camera() -> void:
 	camera_pivot = Node3D.new()
@@ -70,6 +71,7 @@ func _rotate_camera(delta: Vector2) -> void:
 	camera_yaw -= delta.x * mouse_sensitivity
 	camera_pitch -= delta.y * mouse_sensitivity
 	camera_pitch = clampf(camera_pitch, -1.0, 0.65)
+
 	rotation.y = camera_yaw
 	camera_pivot.rotation.x = camera_pitch
 
@@ -81,17 +83,23 @@ func _physics_process(delta: float) -> void:
 		velocity.y = jump_force
 
 	var input_vector := Input.get_vector(
-		"move_left", "move_right", "move_forward", "move_back"
+		"move_left",
+		"move_right",
+		"move_forward",
+		"move_back"
 	)
 
-	if touch_move.length() > 0.1:
+	if touch_move.length() > 0.05:
 		input_vector = touch_move
 
+	var strength := input_vector.length()
 	var direction := (transform.basis * Vector3(input_vector.x, 0, input_vector.y)).normalized()
 
-	if direction:
-		velocity.x = move_toward(velocity.x, direction.x * move_speed, acceleration * delta)
-		velocity.z = move_toward(velocity.z, direction.z * move_speed, acceleration * delta)
+	var current_speed := walk_speed + (run_speed - walk_speed) * strength
+
+	if direction.length() > 0.01:
+		velocity.x = move_toward(velocity.x, direction.x * current_speed, acceleration * delta)
+		velocity.z = move_toward(velocity.z, direction.z * current_speed, acceleration * delta)
 	else:
 		velocity.x = move_toward(velocity.x, 0.0, acceleration * delta)
 		velocity.z = move_toward(velocity.z, 0.0, acceleration * delta)
