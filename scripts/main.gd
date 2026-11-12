@@ -12,20 +12,22 @@ const BUILDING_SPACING := 42.0
 const TREE_COUNT := 36
 
 var player: CharacterBody3D
+
 var joystick: Control
 var interact_button: Button
 var jump_button: Button
+
 var hud_layer: CanvasLayer
 var menu_layer: CanvasLayer
 var settings_layer: CanvasLayer
+
 var status_label: Label
 
 var game_started := false
-var current_mode := "sandbox"
 
 
 func _ready() -> void:
-	_apply_graphics_settings()
+	Settings.apply_settings()
 	_show_main_menu()
 
 
@@ -33,14 +35,24 @@ func _process(_delta: float) -> void:
 	if not game_started:
 		return
 
-	if is_instance_valid(player):
-		var in_vehicle: bool = player.get("in_vehicle") == true
+	if not is_instance_valid(player):
+		return
 
-		if is_instance_valid(interact_button):
-			interact_button.text = "Выйти из машины" if in_vehicle else "Взаимодействие"
+	var in_vehicle: bool = player.get("in_vehicle") == true
 
-		if is_instance_valid(status_label):
-			status_label.text = "В машине" if in_vehicle else "ПЕШЕХОД"
+	if is_instance_valid(interact_button):
+		interact_button.text = (
+			"ВЫЙТИ ИЗ МАШИНЫ"
+			if in_vehicle
+			else "ВЗАИМОДЕЙСТВИЕ"
+		)
+
+	if is_instance_valid(status_label):
+		status_label.text = (
+			"В МАШИНЕ"
+			if in_vehicle
+			else "ПЕШЕХОД"
+		)
 
 
 # ==================================================
@@ -55,12 +67,16 @@ func _show_main_menu() -> void:
 	add_child(menu_layer)
 
 	var background := ColorRect.new()
-	background.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	background.set_anchors_and_offsets_preset(
+		Control.PRESET_FULL_RECT
+	)
 	background.color = Color(0.025, 0.035, 0.055, 1.0)
 	menu_layer.add_child(background)
 
 	var center := CenterContainer.new()
-	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	center.set_anchors_and_offsets_preset(
+		Control.PRESET_FULL_RECT
+	)
 	menu_layer.add_child(center)
 
 	var panel := PanelContainer.new()
@@ -80,7 +96,10 @@ func _show_main_menu() -> void:
 	var subtitle := Label.new()
 	subtitle.text = "Открытый мир · Песочница"
 	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	subtitle.add_theme_color_override("font_color", Color(0.65, 0.72, 0.82))
+	subtitle.add_theme_color_override(
+		"font_color",
+		Color(0.65, 0.72, 0.82)
+	)
 	column.add_child(subtitle)
 
 	_add_menu_button(column, "ИГРАТЬ", _start_game)
@@ -98,6 +117,7 @@ func _add_menu_button(
 	button.custom_minimum_size = Vector2(0, 54)
 	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	button.pressed.connect(callback)
+
 	parent.add_child(button)
 
 
@@ -114,7 +134,6 @@ func _start_game() -> void:
 		return
 
 	game_started = true
-	current_mode = "sandbox"
 
 	_clear_layer(menu_layer)
 	menu_layer = null
@@ -126,11 +145,14 @@ func _start_game() -> void:
 	_create_props()
 	_create_hud()
 
+	_apply_graphics_settings()
+
 
 func _create_player() -> void:
 	player = CharacterBody3D.new()
 	player.name = "Player"
 	player.set_script(PLAYER_SCRIPT)
+
 	add_child(player)
 	player.global_position = Vector3(0, 1.5, 0)
 
@@ -140,23 +162,28 @@ func _create_player() -> void:
 # ==================================================
 
 func _create_world() -> void:
-	var environment := WorldEnvironment.new()
+	var environment_node := WorldEnvironment.new()
 	var env := Environment.new()
 
-	env.background_mode = Environment.BG_SKY
-	env.sky = Sky.new()
+	env.background_mode = Environment.BG_COLOR
+	env.background_color = Color(0.36, 0.56, 0.76)
+
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 	env.ambient_light_color = Color(0.65, 0.72, 0.85)
 	env.ambient_light_energy = 0.65
+
 	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
 
-	environment.environment = env
-	add_child(environment)
+	environment_node.environment = env
+	add_child(environment_node)
 
 	var sun := DirectionalLight3D.new()
+	sun.name = "WorldSun"
+	sun.add_to_group("world_sun")
 	sun.rotation_degrees = Vector3(-48, -35, 0)
 	sun.light_energy = 1.0
 	sun.shadow_enabled = Settings.shadow_quality > 0
+
 	add_child(sun)
 
 	_create_ground()
@@ -176,20 +203,29 @@ func _create_ground() -> void:
 	var visual := MeshInstance3D.new()
 	visual.mesh = mesh
 	visual.position.y = -0.5
-	visual.material_override = _make_material(Color(0.19, 0.31, 0.18))
+	visual.material_override = _make_material(
+		Color(0.19, 0.31, 0.18)
+	)
 	body.add_child(visual)
 
 	var collision := CollisionShape3D.new()
 	var shape := BoxShape3D.new()
+
 	shape.size = mesh.size
 	collision.shape = shape
 	collision.position.y = -0.5
+
 	body.add_child(collision)
 
 
 func _create_roads() -> void:
-	var road_material := _make_material(Color(0.12, 0.13, 0.15))
-	var marking_material := _make_material(Color(0.85, 0.78, 0.48))
+	var road_material := _make_material(
+		Color(0.12, 0.13, 0.15)
+	)
+
+	var marking_material := _make_material(
+		Color(0.85, 0.78, 0.48)
+	)
 
 	for i in range(-3, 4):
 		var offset := float(i) * BUILDING_SPACING
@@ -237,31 +273,43 @@ func _create_buildings() -> void:
 			if x == 0 or z == 0:
 				continue
 
-			var position := Vector3(
+			var building_position := Vector3(
 				float(x) * BUILDING_SPACING + 20.0,
-				0,
+				0.0,
 				float(z) * BUILDING_SPACING + 20.0
 			)
 
-			var height := 10.0 + float((abs(x * 7 + z * 3)) % 4) * 3.0
+			var height := (
+				10.0
+				+ float(abs(x * 7 + z * 3) % 4) * 3.0
+			)
+
+			var material_index := (
+				abs(x + z) % building_materials.size()
+			)
 
 			_add_building(
 				"Building_%d_%d" % [x, z],
-				position,
+				building_position,
 				Vector3(17.0, height, 17.0),
-				building_materials[abs(x + z) % building_materials.size()]
+				building_materials[material_index]
 			)
 
 
 func _add_building(
 	building_name: String,
-	position: Vector3,
+	position_value: Vector3,
 	building_size: Vector3,
 	material: Material
 ) -> void:
 	var body := StaticBody3D.new()
 	body.name = building_name
-	body.position = position + Vector3(0, building_size.y * 0.5, 0)
+	body.position = position_value + Vector3(
+		0,
+		building_size.y * 0.5,
+		0
+	)
+
 	add_child(body)
 
 	var mesh := BoxMesh.new()
@@ -274,8 +322,10 @@ func _add_building(
 
 	var collision := CollisionShape3D.new()
 	var shape := BoxShape3D.new()
+
 	shape.size = building_size
 	collision.shape = shape
+
 	body.add_child(collision)
 
 
@@ -306,41 +356,45 @@ func _create_trees() -> void:
 			if x == 0 or z == 0:
 				continue
 
-			if index >= TREE_COUNT:
-				break
-
 			var px := float(x) * BUILDING_SPACING + 8.0
 			var pz := float(z) * BUILDING_SPACING + 8.0
-			var position := Vector3(px, 1.4, pz)
+
+			var position_value := Vector3(px, 1.4, pz)
 
 			trunk_multi.set_instance_transform(
 				index,
-				Transform3D(Basis.IDENTITY, position)
+				Transform3D(Basis.IDENTITY, position_value)
 			)
 
 			crown_multi.set_instance_transform(
 				index,
-				Transform3D(Basis.IDENTITY, position + Vector3(0, 2.5, 0))
+				Transform3D(
+					Basis.IDENTITY,
+					position_value + Vector3(0, 2.5, 0)
+				)
 			)
 
 			index += 1
 
-		if index >= TREE_COUNT:
-			break
-
 	var trunk_instance := MultiMeshInstance3D.new()
+	trunk_instance.name = "TreeTrunks"
 	trunk_instance.multimesh = trunk_multi
-	trunk_instance.material_override = _make_material(Color(0.28, 0.17, 0.10))
+	trunk_instance.material_override = _make_material(
+		Color(0.28, 0.17, 0.10)
+	)
 	add_child(trunk_instance)
 
 	var crown_instance := MultiMeshInstance3D.new()
+	crown_instance.name = "TreeCrowns"
 	crown_instance.multimesh = crown_multi
-	crown_instance.material_override = _make_material(Color(0.12, 0.34, 0.14))
+	crown_instance.material_override = _make_material(
+		Color(0.12, 0.34, 0.14)
+	)
 	add_child(crown_instance)
 
 
 # ==================================================
-# ТРАНСПОРТ И ОБЪЕКТЫ
+# ТРАНСПОРТ
 # ==================================================
 
 func _create_vehicles() -> void:
@@ -355,9 +409,14 @@ func _create_vehicles() -> void:
 		var vehicle := RigidBody3D.new()
 		vehicle.name = "Vehicle_%d" % i
 		vehicle.set_script(VEHICLE_SCRIPT)
+
 		add_child(vehicle)
 		vehicle.global_position = positions[i]
 
+
+# ==================================================
+# NPC
+# ==================================================
 
 func _create_npcs() -> void:
 	var count: int = clampi(Settings.npc_amount, 0, 10)
@@ -366,15 +425,21 @@ func _create_npcs() -> void:
 		var npc := CharacterBody3D.new()
 		npc.name = "NPC_%d" % i
 		npc.set_script(NPC_SCRIPT)
+
 		add_child(npc)
 
 		var angle := TAU * float(i) / maxf(float(count), 1.0)
+
 		npc.global_position = Vector3(
 			cos(angle) * 16.0,
 			1.2,
 			sin(angle) * 16.0
 		)
 
+
+# ==================================================
+# ФИЗИЧЕСКИЕ ОБЪЕКТЫ
+# ==================================================
 
 func _create_props() -> void:
 	var positions: Array[Vector3] = [
@@ -388,14 +453,19 @@ func _create_props() -> void:
 		var prop := RigidBody3D.new()
 		prop.name = "PhysicsProp_%d" % i
 		prop.set_script(PROP_SCRIPT)
+
 		add_child(prop)
 		prop.global_position = positions[i]
 
 
+# ==================================================
+# ВСПОМОГАТЕЛЬНЫЕ ОБЪЕКТЫ
+# ==================================================
+
 func _add_box_visual(
 	object_name: String,
 	box_size: Vector3,
-	position: Vector3,
+	position_value: Vector3,
 	material: Material
 ) -> void:
 	var mesh := BoxMesh.new()
@@ -404,20 +474,23 @@ func _add_box_visual(
 	var visual := MeshInstance3D.new()
 	visual.name = object_name
 	visual.mesh = mesh
-	visual.position = position
+	visual.position = position_value
 	visual.material_override = material
+
 	add_child(visual)
 
 
 func _make_material(color: Color) -> StandardMaterial3D:
 	var material := StandardMaterial3D.new()
+
 	material.albedo_color = color
 	material.roughness = 0.9
+
 	return material
 
 
 # ==================================================
-# HUD И УПРАВЛЕНИЕ
+# HUD
 # ==================================================
 
 func _create_hud() -> void:
@@ -426,35 +499,50 @@ func _create_hud() -> void:
 	add_child(hud_layer)
 
 	var root := Control.new()
-	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	root.set_anchors_and_offsets_preset(
+		Control.PRESET_FULL_RECT
+	)
 	root.mouse_filter = Control.MOUSE_FILTER_PASS
 	hud_layer.add_child(root)
 
 	joystick = Control.new()
 	joystick.set_script(JOYSTICK_SCRIPT)
+
 	joystick.anchor_left = 0.0
 	joystick.anchor_top = 1.0
 	joystick.anchor_right = 0.0
 	joystick.anchor_bottom = 1.0
+
 	joystick.offset_left = 35
 	joystick.offset_top = -205
 	joystick.offset_right = 215
 	joystick.offset_bottom = -25
+
 	root.add_child(joystick)
 
 	if joystick.has_signal("vector_changed"):
-		joystick.connect("vector_changed", _on_joystick)
+		joystick.connect(
+			"vector_changed",
+			_on_joystick
+		)
 
 	var right_column := VBoxContainer.new()
+
 	right_column.anchor_left = 1.0
 	right_column.anchor_top = 1.0
 	right_column.anchor_right = 1.0
 	right_column.anchor_bottom = 1.0
+
 	right_column.offset_left = -190
 	right_column.offset_top = -250
 	right_column.offset_right = -25
 	right_column.offset_bottom = -25
-	right_column.add_theme_constant_override("separation", 10)
+
+	right_column.add_theme_constant_override(
+		"separation",
+		10
+	)
+
 	root.add_child(right_column)
 
 	jump_button = Button.new()
@@ -478,13 +566,18 @@ func _create_hud() -> void:
 	status_label = Label.new()
 	status_label.text = "ПЕШЕХОД"
 	status_label.position = Vector2(25, 20)
-	status_label.add_theme_font_size_override("font_size", 20)
+	status_label.add_theme_font_size_override(
+		"font_size",
+		20
+	)
+
 	root.add_child(status_label)
 
 
 func _on_joystick(value: Vector2) -> void:
-	if is_instance_valid(player) and player.has_method("set_touch_input"):
-		player.call("set_touch_input", value)
+	if is_instance_valid(player):
+		if player.has_method("set_touch_input"):
+			player.call("set_touch_input", value)
 
 
 func _jump() -> void:
@@ -503,6 +596,10 @@ func _interact() -> void:
 		player.call("interact")
 
 
+# ==================================================
+# ВОЗВРАТ В МЕНЮ
+# ==================================================
+
 func _return_to_menu() -> void:
 	game_started = false
 
@@ -517,16 +614,34 @@ func _return_to_menu() -> void:
 	for child in get_children():
 		var child_name := str(child.name)
 
-		if child is WorldEnvironment or child is DirectionalLight3D:
+		if child is WorldEnvironment:
 			child.queue_free()
-		elif child_name == "Ground" \
-		or child_name.begins_with("Road_") \
-		or child_name.begins_with("Mark_") \
-		or child_name.begins_with("Building_") \
-		or child is MultiMeshInstance3D \
-		or child_name.begins_with("Vehicle_") \
-		or child_name.begins_with("NPC_") \
-		or child_name.begins_with("PhysicsProp_"):
+
+		elif child is DirectionalLight3D:
+			child.queue_free()
+
+		elif child_name == "Ground":
+			child.queue_free()
+
+		elif child_name.begins_with("Road_"):
+			child.queue_free()
+
+		elif child_name.begins_with("Mark_"):
+			child.queue_free()
+
+		elif child_name.begins_with("Building_"):
+			child.queue_free()
+
+		elif child is MultiMeshInstance3D:
+			child.queue_free()
+
+		elif child_name.begins_with("Vehicle_"):
+			child.queue_free()
+
+		elif child_name.begins_with("NPC_"):
+			child.queue_free()
+
+		elif child_name.begins_with("PhysicsProp_"):
 			child.queue_free()
 
 	_show_main_menu()
@@ -544,12 +659,16 @@ func _show_settings() -> void:
 	add_child(settings_layer)
 
 	var background := ColorRect.new()
-	background.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	background.set_anchors_and_offsets_preset(
+		Control.PRESET_FULL_RECT
+	)
 	background.color = Color(0.02, 0.025, 0.04, 0.96)
 	settings_layer.add_child(background)
 
 	var center := CenterContainer.new()
-	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	center.set_anchors_and_offsets_preset(
+		Control.PRESET_FULL_RECT
+	)
 	settings_layer.add_child(center)
 
 	var panel := PanelContainer.new()
@@ -567,42 +686,64 @@ func _show_settings() -> void:
 	column.add_child(title)
 
 	_add_option(
-		column, "Графика",
+		column,
+		"Графика",
 		["Низкая", "Средняя", "Высокая"],
 		Settings.graphics_quality - 1,
 		_set_graphics
 	)
 
 	_add_option(
-		column, "Тени",
+		column,
+		"Тени",
 		["Выкл.", "Низкие", "Высокие"],
 		Settings.shadow_quality,
 		_set_shadows
 	)
 
 	_add_option(
-		column, "Дальность",
+		column,
+		"Дальность",
 		["80 м", "120 м", "180 м", "250 м"],
 		_distance_index(),
 		_set_distance
 	)
 
 	_add_option(
-		column, "NPC",
+		column,
+		"NPC",
 		["0", "2", "4", "6", "10"],
 		_npc_index(),
 		_set_npcs
 	)
 
 	_add_option(
-		column, "FPS",
+		column,
+		"Физика",
+		["Низкая", "Средняя", "Высокая"],
+		Settings.physics_quality - 1,
+		_set_physics
+	)
+
+	_add_option(
+		column,
+		"FPS",
 		["30", "45", "60", "90", "120"],
 		_fps_index(),
 		_set_fps
 	)
 
-	_add_menu_button(column, "СОХРАНИТЬ", _save_settings)
-	_add_menu_button(column, "НАЗАД", _close_settings)
+	_add_menu_button(
+		column,
+		"СОХРАНИТЬ",
+		_save_settings
+	)
+
+	_add_menu_button(
+		column,
+		"НАЗАД",
+		_close_settings
+	)
 
 
 func _add_option(
@@ -624,7 +765,10 @@ func _add_option(
 	for item in options:
 		option.add_item(str(item))
 
-	option.select(clampi(selected, 0, options.size() - 1))
+	option.select(
+		clampi(selected, 0, options.size() - 1)
+	)
+
 	option.item_selected.connect(callback)
 	row.add_child(option)
 
@@ -640,28 +784,61 @@ func _set_shadows(index: int) -> void:
 
 
 func _set_distance(index: int) -> void:
-	var distances: Array[float] = [80.0, 120.0, 180.0, 250.0]
+	var distances: Array[float] = [
+		80.0,
+		120.0,
+		180.0,
+		250.0
+	]
+
 	Settings.view_distance = distances[index]
 	_apply_graphics_settings()
 
 
 func _set_npcs(index: int) -> void:
-	var amounts: Array[int] = [0, 2, 4, 6, 10]
+	var amounts: Array[int] = [
+		0,
+		2,
+		4,
+		6,
+		10
+	]
+
 	Settings.npc_amount = amounts[index]
 
 
+func _set_physics(index: int) -> void:
+	Settings.physics_quality = index + 1
+	_apply_graphics_settings()
+
+
 func _set_fps(index: int) -> void:
-	var values: Array[int] = [30, 45, 60, 90, 120]
+	var values: Array[int] = [
+		30,
+		45,
+		60,
+		90,
+		120
+	]
+
 	Settings.target_fps = values[index]
 	_apply_graphics_settings()
 
 
 func _distance_index() -> int:
-	var distances: Array[float] = [80.0, 120.0, 180.0, 250.0]
+	var distances: Array[float] = [
+		80.0,
+		120.0,
+		180.0,
+		250.0
+	]
+
 	var closest := 0
 
 	for i in range(distances.size()):
-		if absf(Settings.view_distance - distances[i]) < absf(
+		if absf(
+			Settings.view_distance - distances[i]
+		) < absf(
 			Settings.view_distance - distances[closest]
 		):
 			closest = i
@@ -670,39 +847,52 @@ func _distance_index() -> int:
 
 
 func _npc_index() -> int:
-	var amounts: Array[int] = [0, 2, 4, 6, 10]
-	return amounts.find(Settings.npc_amount) if amounts.has(Settings.npc_amount) else 1
+	var amounts: Array[int] = [
+		0,
+		2,
+		4,
+		6,
+		10
+	]
+
+	if amounts.has(Settings.npc_amount):
+		return amounts.find(Settings.npc_amount)
+
+	return 1
 
 
 func _fps_index() -> int:
-	var values: Array[int] = [30, 45, 60, 90, 120]
-	return values.find(Settings.target_fps) if values.has(Settings.target_fps) else 2
+	var values: Array[int] = [
+		30,
+		45,
+		60,
+		90,
+		120
+	]
+
+	if values.has(Settings.target_fps):
+		return values.find(Settings.target_fps)
+
+	return 2
 
 
 func _apply_graphics_settings() -> void:
+	Settings.apply_settings()
+
 	if is_instance_valid(player):
 		var camera_value: Variant = player.get("camera")
 
 		if camera_value is Camera3D:
-			var player_camera: Camera3D = camera_value
+			var player_camera := camera_value as Camera3D
 			player_camera.far = Settings.view_distance
 
-	var viewport := get_viewport()
+	for sun in get_tree().get_nodes_in_group("world_sun"):
+		if sun is DirectionalLight3D:
+			sun.shadow_enabled = Settings.shadow_quality > 0
 
-	if viewport:
-		match Settings.graphics_quality:
-			1:
-				viewport.msaa_3d = Viewport.MSAA_DISABLED
-			2:
-				viewport.msaa_3d = Viewport.MSAA_2X
-			3:
-				viewport.msaa_3d = Viewport.MSAA_4X
-			_:
-				viewport.msaa_3d = Viewport.MSAA_DISABLED
-
-	for node in get_tree().get_nodes_in_group("vehicles"):
-		if node.has_method("apply_settings"):
-			node.call("apply_settings")
+	for vehicle in get_tree().get_nodes_in_group("vehicles"):
+		if vehicle.has_method("apply_settings"):
+			vehicle.call("apply_settings")
 
 
 func _save_settings() -> void:
