@@ -11,7 +11,7 @@ var gravity: float = ProjectSettings.get_setting(
 )
 
 var camera_yaw := 0.0
-var camera_pitch := -0.28
+var camera_pitch := 0.28
 
 var touch_move := Vector2.ZERO
 
@@ -29,10 +29,6 @@ func _ready() -> void:
 	_build_character()
 	_build_camera()
 
-
-# --------------------------------------------------
-# CHARACTER
-# --------------------------------------------------
 
 func _build_character() -> void:
 	var collision := CollisionShape3D.new()
@@ -72,10 +68,6 @@ func _add_fallback_model() -> void:
 	add_child(visual)
 
 
-# --------------------------------------------------
-# CAMERA
-# --------------------------------------------------
-
 func _build_camera() -> void:
 	camera_pivot = Node3D.new()
 	camera_pivot.position.y = 1.35
@@ -83,24 +75,18 @@ func _build_camera() -> void:
 
 	camera = Camera3D.new()
 	camera.position = Vector3(0, 2.6, 6.2)
-	camera.rotation = Vector3.ZERO
 	camera.fov = 75.0
 	camera.far = 1000.0
 	camera.current = true
 
 	camera_pivot.add_child(camera)
-
 	camera_pivot.rotation.x = camera_pitch
 
 
 func _input(event: InputEvent) -> void:
-	# MOUSE CAMERA CONTROL
-
 	if event is InputEventMouseMotion:
 		if Input.is_mouse_button_pressed(MOUSE_BUTTON_RIGHT):
 			_rotate_camera(event.relative)
-
-	# TOUCH CAMERA CONTROL
 
 	if event is InputEventScreenTouch:
 		var viewport_size := get_viewport().get_visible_rect().size
@@ -128,15 +114,11 @@ func _rotate_camera(delta: Vector2) -> void:
 	camera_yaw -= delta.x * mouse_sensitivity
 	camera_pitch -= delta.y * mouse_sensitivity
 
-	camera_pitch = clampf(camera_pitch, -0.85, 0.15)
+	camera_pitch = clampf(camera_pitch, 0.05, 0.85)
 
 	rotation.y = camera_yaw
 	camera_pivot.rotation.x = camera_pitch
 
-
-# --------------------------------------------------
-# MOVEMENT
-# --------------------------------------------------
 
 func _physics_process(delta: float) -> void:
 	if not is_on_floor():
