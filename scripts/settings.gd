@@ -57,6 +57,7 @@ func _add_action(action_name: String, keys: Array) -> void:
 # ==================================================
 
 func apply_settings() -> void:
+	target_fps = clampi(target_fps, 30, 120)
 	Engine.max_fps = target_fps
 
 	match physics_quality:
