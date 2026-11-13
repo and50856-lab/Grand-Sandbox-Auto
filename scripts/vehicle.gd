@@ -60,6 +60,8 @@ var ai_stuck_time: float = 0.0
 var ai_last_position: Vector3 = Vector3.ZERO
 var ai_steer_override: float = 0.0
 var ai_throttle_override: float = 0.0
+var ai_reverse_timer: float = 0.0
+var ai_recovery_steer: float = 1.0
 
 const COLLISION_MASK: int = 0xFFFFFFFF
 
@@ -422,54 +424,99 @@ func _get_player_controls() -> Vector2:
 
 func _get_ai_controls() -> Vector2:
 	var local_target := global_transform.basis.inverse() * (ai_destination - global_position)
-	var distance := global_position.distance_to(ai_destination)
+	var distance := Vector2(local_target.x, local_target.z).length()
 
 	if distance < 7.0:
 		ai_time_left = 0.0
 		return Vector2.ZERO
 
 	var desired_angle := atan2(local_target.x, -local_target.z)
-	var steer := clampf(desired_angle * 1.5, -1.0, 1.0)
+	var steer := clampf(desired_angle * 1.8, -1.0, 1.0)
 
-	var throttle := 0.65
+	# Если цель позади, сначала разворачиваемся вперёд по дуге.
+	# Само по себе положение цели за машиной не включает заднюю передачу.
+	var angle_error := absf(desired_angle)
+	var throttle := 0.9
 
-	if absf(desired_angle) > 1.3:
-		throttle = 0.18
+	if angle_error > 1.55:
+		throttle = 0.28
+	elif angle_error > 0.85:
+		throttle = 0.42
 
-	if local_target.z > 0.0:
-		throttle = -0.3
-
+	# Три луча проверяют центр и обе стороны перед автомобилем.
 	var space_state := get_world_3d().direct_space_state
 	var forward := -global_transform.basis.z
-	var ray_start := global_position + Vector3.UP * 0.8
-	var ray_end := ray_start + forward * 5.0
+	var right := global_transform.basis.x
+	var ray_start := global_position + Vector3.UP * 0.85
+	var ray_distance := 5.5
 
-	var query := PhysicsRayQueryParameters3D.create(ray_start, ray_end, COLLISION_MASK, [get_rid()])
-	query.collide_with_areas = false
-	query.collide_with_bodies = true
+	var center_query := PhysicsRayQueryParameters3D.create(
+		ray_start,
+		ray_start + forward * ray_distance,
+		COLLISION_MASK,
+		[get_rid()]
+	)
+	center_query.collide_with_areas = false
+	center_query.collide_with_bodies = true
+	var center_hit := space_state.intersect_ray(center_query)
 
-	var obstacle := space_state.intersect_ray(query)
+	if not center_hit.is_empty():
+		var left_query := PhysicsRayQueryParameters3D.create(
+			ray_start - right * 0.9,
+			ray_start - right * 0.9 + forward * ray_distance,
+			COLLISION_MASK,
+			[get_rid()]
+		)
+		left_query.collide_with_areas = false
+		left_query.collide_with_bodies = true
 
-	if not obstacle.is_empty():
-		var normal: Vector3 = obstacle["normal"]
-		var side := global_transform.basis.x.dot(normal)
+		var right_query := PhysicsRayQueryParameters3D.create(
+			ray_start + right * 0.9,
+			ray_start + right * 0.9 + forward * ray_distance,
+			COLLISION_MASK,
+			[get_rid()]
+		)
+		right_query.collide_with_areas = false
+		right_query.collide_with_bodies = true
 
-		if absf(side) < 0.15:
-			steer = 1.0 if randf() > 0.5 else -1.0
+		var left_hit := space_state.intersect_ray(left_query)
+		var right_hit := space_state.intersect_ray(right_query)
+
+		if left_hit.is_empty() and not right_hit.is_empty():
+			steer = -0.85
+		elif right_hit.is_empty() and not left_hit.is_empty():
+			steer = 0.85
 		else:
-			steer = signf(side)
+			var hit_normal: Vector3 = center_hit["normal"]
+			var side := right.dot(hit_normal)
+			if absf(side) > 0.12:
+				steer = clampf(-side * 2.0, -1.0, 1.0)
+			else:
+				steer = ai_recovery_steer
+		throttle = minf(throttle, 0.22)
 
-		throttle = -0.35
-
-	if global_position.distance_to(ai_last_position) < 0.5:
-		ai_stuck_time += get_physics_process_delta_time()
-	else:
+	# Оцениваем прогресс не по одному кадру, а относительно последней
+	# контрольной позиции. Это не даёт ИИ ошибочно считать себя застрявшим.
+	var moved := global_position.distance_to(ai_last_position)
+	if moved > 0.35:
 		ai_stuck_time = 0.0
 		ai_last_position = global_position
+	else:
+		ai_stuck_time += get_physics_process_delta_time()
 
-	if ai_stuck_time > 3.0:
-		throttle = -0.55
-		steer = -1.0 if steer >= 0.0 else 1.0
+	# Короткий задний манёвр используется только после реального застревания.
+	if ai_reverse_timer > 0.0:
+		ai_reverse_timer = maxf(
+			ai_reverse_timer - get_physics_process_delta_time(),
+			0.0
+		)
+		return Vector2(ai_recovery_steer, -0.42)
+
+	if ai_stuck_time > 2.4:
+		ai_reverse_timer = 1.15
+		ai_stuck_time = 0.0
+		ai_recovery_steer = -1.0 if randf() < 0.5 else 1.0
+		return Vector2(ai_recovery_steer, -0.42)
 
 	return Vector2(steer, throttle)
 
@@ -480,10 +527,7 @@ func _physics_process(delta: float) -> void:
 		if ai_time_left <= 0.0:
 			release_ai_driver()
 
-	if not driving and not ai_driving and linear_velocity.length() < 0.15:
-		_apply_upright_stability()
-		return
-
+	# Подвеска продолжает работать и на стоящей машине.
 	var controls := Vector2.ZERO
 
 	if driving:
@@ -628,7 +672,7 @@ func _physics_process(delta: float) -> void:
 		apply_force(rolling_force, offset)
 
 		wheel.rotation.x -= longitudinal_speed * delta / maxf(wheel_radius, 0.1)
-		wheel.rotation.y = steer_angle
+		wheel.rotation.y = -steer_angle
 
 	if linear_velocity.length() > 0.5:
 		apply_central_force(-linear_velocity * linear_velocity.length() * 0.32)
