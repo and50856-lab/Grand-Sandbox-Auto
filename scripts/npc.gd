@@ -1,7 +1,7 @@
 extends CharacterBody3D
 
-@export var move_speed: float = 2.4
-@export var vehicle_search_distance: float = 35.0
+@export var move_speed: float = 3.0
+@export var vehicle_search_distance: float = 42.0
 @export var vehicle_drive_distance: float = 55.0
 
 enum NPCState {
@@ -171,7 +171,7 @@ func _find_vehicle() -> void:
 	target_vehicle = nearest
 
 	var side := nearest.global_transform.basis.x
-	approach_position = nearest.global_position + side * 2.4
+	approach_position = nearest.global_position + side * 1.9
 	approach_position.y = global_position.y
 
 	state = NPCState.APPROACHING_VEHICLE
@@ -219,7 +219,7 @@ func _update_wandering(delta: float) -> void:
 	if change_timer <= 0.0:
 		_choose_direction()
 
-		if randf() < 0.22:
+		if randf() < 0.35:
 			_find_vehicle()
 
 	if obstacle_timer <= 0.0:
