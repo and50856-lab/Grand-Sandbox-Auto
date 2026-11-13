@@ -2,8 +2,8 @@ extends Control
 
 signal vector_changed(value: Vector2)
 
-@export var radius: float = 105.0
-@export var knob_radius: float = 43.0
+@export var radius: float = 145.0
+@export var knob_radius: float = 58.0
 
 var value: Vector2 = Vector2.ZERO
 var active_touch: int = -1
@@ -12,7 +12,7 @@ var knob_position: Vector2 = Vector2.ZERO
 
 
 func _ready() -> void:
-	custom_minimum_size = Vector2(240.0, 240.0)
+	custom_minimum_size = Vector2(320.0, 320.0)
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	queue_redraw()
 
@@ -69,26 +69,40 @@ func _reset_stick() -> void:
 func _draw() -> void:
 	var center := size * 0.5
 
+	# Внешняя площадка.
 	draw_circle(
 		center,
 		radius,
-		Color(0.04, 0.05, 0.07, 0.52)
+		Color(0.035, 0.045, 0.065, 0.68)
 	)
 
+	# Внешняя окантовка.
 	draw_arc(
 		center,
 		radius,
 		0.0,
 		TAU,
-		64,
-		Color(0.8, 0.85, 0.95, 0.65),
+		80,
+		Color(0.82, 0.88, 0.98, 0.75),
 		4.0
 	)
 
+	# Внутреннее кольцо.
+	draw_arc(
+		center,
+		radius * 0.62,
+		0.0,
+		TAU,
+		64,
+		Color(0.65, 0.76, 0.92, 0.18),
+		2.0
+	)
+
+	# Ручка.
 	draw_circle(
 		center + knob_position,
 		knob_radius,
-		Color(0.25, 0.65, 1.0, 0.88)
+		Color(0.18, 0.52, 0.92, 0.95)
 	)
 
 	draw_arc(
@@ -96,7 +110,14 @@ func _draw() -> void:
 		knob_radius,
 		0.0,
 		TAU,
-		40,
-		Color.WHITE,
-		2.0
+		56,
+		Color(0.94, 0.97, 1.0, 0.95),
+		3.0
+	)
+
+	# Небольшой блик в центре.
+	draw_circle(
+		center + knob_position,
+		knob_radius * 0.18,
+		Color(0.8, 0.91, 1.0, 0.22)
 	)
