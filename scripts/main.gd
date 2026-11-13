@@ -284,9 +284,7 @@ func _create_buildings() -> void:
 				+ float(abs(x * 7 + z * 3) % 4) * 3.0
 			)
 
-			var material_index := (
-				abs(x + z) % building_materials.size()
-			)
+			var material_index: int = int(abs(x + z)) % building_materials.size()
 
 			_add_building(
 				"Building_%d_%d" % [x, z],
