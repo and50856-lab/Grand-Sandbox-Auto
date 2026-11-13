@@ -193,7 +193,7 @@ func _unhandled_input(event: InputEvent) -> void:
 
 	elif event is InputEventScreenDrag:
 		if event.index == look_touch_id:
-			var delta := event.position - last_touch
+			var delta: Vector2 = event.position - last_touch
 			last_touch = event.position
 			_rotate_camera(delta)
 
