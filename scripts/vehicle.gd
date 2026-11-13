@@ -37,11 +37,16 @@ var mobile_steering: float = 0.0
 var mobile_throttle: float = 0.0
 var current_steering: float = 0.0
 
+var camera_rig: Node3D
+var camera_spring_arm: SpringArm3D
 var vehicle_camera: Camera3D
+
 var camera_yaw: float = 0.0
 var camera_pitch: float = -0.16
-var camera_distance: float = 8.0
-var camera_height: float = 3.5
+var camera_distance: float = 8.5
+var camera_height: float = 1.6
+
+var camera_active: bool = false
 
 var wheel_nodes: Array[MeshInstance3D] = []
 var wheel_positions: Array[Vector3] = []
@@ -55,8 +60,6 @@ var ai_stuck_time: float = 0.0
 var ai_last_position: Vector3 = Vector3.ZERO
 var ai_steer_override: float = 0.0
 var ai_throttle_override: float = 0.0
-
-var camera_active: bool = false
 
 const COLLISION_MASK: int = 0xFFFFFFFF
 
@@ -81,10 +84,34 @@ func _ready() -> void:
 	_build_camera()
 
 
-func _process(_delta: float) -> void:
-	if camera_active and driving and is_instance_valid(driver):
-		if driver.get("current_vehicle") == self:
-			_update_camera_transform()
+func _process(delta: float) -> void:
+	if not camera_active or not driving:
+		return
+
+	if not is_instance_valid(driver):
+		return
+
+	if driver.get("current_vehicle") != self:
+		return
+
+	if not is_instance_valid(camera_rig):
+		return
+
+	# Камера следует за положением именно этой машины.
+	# Её поворот при этом не зависит от поворота кузова.
+	var target_position := global_position + Vector3.UP * camera_height
+	var follow_weight := 1.0 - exp(-delta * 14.0)
+
+	camera_rig.global_position = camera_rig.global_position.lerp(
+		target_position,
+		follow_weight
+	)
+
+	camera_rig.global_rotation = Vector3(
+		camera_pitch,
+		camera_yaw,
+		0.0
+	)
 
 
 func _build_body() -> void:
@@ -174,45 +201,58 @@ func _build_wheels() -> void:
 
 
 func _build_camera() -> void:
+	# Отдельная камера-преследователь.
+	# Она принадлежит этой машине, но не наследует её вращение.
+	camera_rig = Node3D.new()
+	camera_rig.name = "VehicleCameraRig"
+	camera_rig.top_level = true
+	add_child(camera_rig)
+
+	camera_rig.global_position = global_position + Vector3.UP * camera_height
+	camera_rig.global_rotation = Vector3(camera_pitch, camera_yaw, 0.0)
+
+	camera_spring_arm = SpringArm3D.new()
+	camera_spring_arm.name = "VehicleCameraSpringArm"
+	camera_spring_arm.spring_length = camera_distance
+	camera_spring_arm.margin = 0.25
+	camera_spring_arm.collision_mask = 1
+	camera_rig.add_child(camera_spring_arm)
+
+	# Исключаем кузов этой машины из проверки столкновений камеры.
+	camera_spring_arm.add_excluded_object(get_rid())
+
 	vehicle_camera = Camera3D.new()
-	vehicle_camera.fov = 78.0
+	vehicle_camera.name = "VehicleCamera"
+	vehicle_camera.fov = 75.0
 	vehicle_camera.near = 0.08
 	vehicle_camera.far = Settings.view_distance
-	add_child(vehicle_camera)
+	camera_spring_arm.add_child(vehicle_camera)
 
-	# Камера больше не наследует вращение и перемещение кузова.
-	vehicle_camera.top_level = true
-
-	_update_camera_transform()
+	vehicle_camera.current = false
 
 
-func _update_camera_transform() -> void:
-	if not is_instance_valid(vehicle_camera):
+func _update_camera_transform(snap: bool = false) -> void:
+	if not is_instance_valid(camera_rig):
 		return
 
-	camera_pitch = clampf(camera_pitch, -0.55, 0.22)
+	var target_position := global_position + Vector3.UP * camera_height
 
-	var horizontal_distance := camera_distance * cos(camera_pitch)
-	var vertical_distance := camera_height + camera_distance * sin(-camera_pitch)
+	if snap:
+		camera_rig.global_position = target_position
 
-	var offset := Vector3(
-		sin(camera_yaw) * horizontal_distance,
-		vertical_distance,
-		cos(camera_yaw) * horizontal_distance
+	camera_rig.global_rotation = Vector3(
+		camera_pitch,
+		camera_yaw,
+		0.0
 	)
-
-	# Камера располагается относительно конкретной машины,
-	# но её вращение остаётся независимым от кузова.
-	var camera_target := global_position + Vector3.UP * 1.0
-	vehicle_camera.global_position = camera_target + offset
-	vehicle_camera.look_at(camera_target, Vector3.UP)
 
 
 func rotate_vehicle_camera(movement: Vector2, sensitivity: float) -> void:
 	camera_yaw -= movement.x * sensitivity
 	camera_pitch -= movement.y * sensitivity
 
-	camera_pitch = clampf(camera_pitch, -0.55, 0.22)
+	# Yaw не ограничиваем: можно облететь машину на 360 градусов.
+	camera_pitch = clampf(camera_pitch, -0.65, 0.25)
 
 	_update_camera_transform()
 
@@ -256,7 +296,9 @@ func enter_vehicle(player: Node3D) -> void:
 	if driver.has_method("enter_vehicle"):
 		driver.call("enter_vehicle", self)
 
-	_update_camera_transform()
+	_update_camera_transform(true)
+
+	# Переключаем активную камеру именно на эту машину.
 	vehicle_camera.make_current()
 
 
@@ -362,7 +404,7 @@ func reset_upright() -> void:
 	mobile_throttle = 0.0
 
 	if camera_active:
-		_update_camera_transform()
+		_update_camera_transform(true)
 
 
 func _get_player_controls() -> Vector2:
