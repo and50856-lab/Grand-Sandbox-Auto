@@ -1,6 +1,6 @@
 extends CharacterBody3D
 
-@export var move_speed: float = 1.7
+@export var move_speed: float = 2.4
 @export var vehicle_search_distance: float = 35.0
 @export var vehicle_drive_distance: float = 55.0
 
@@ -12,13 +12,13 @@ enum NPCState {
 
 var state: NPCState = NPCState.WANDERING
 
-var gravity: float = float(
-	ProjectSettings.get_setting("physics/3d/default_gravity")
-)
+var gravity: float = float(ProjectSettings.get_setting("physics/3d/default_gravity"))
 
 var direction := Vector3.ZERO
 var change_timer := 0.0
 var animation_time := 0.0
+var vehicle_cooldown := 0.0
+var obstacle_timer := 0.0
 
 var left_leg: Node3D
 var right_leg: Node3D
@@ -109,15 +109,23 @@ func _build_character() -> void:
 
 
 func _choose_direction() -> void:
-	var rng := RandomNumberGenerator.new()
-	rng.randomize()
-
-	var angle := rng.randf_range(0.0, TAU)
+	var angle := randf_range(0.0, TAU)
 	direction = Vector3(cos(angle), 0.0, sin(angle))
-	change_timer = rng.randf_range(2.0, 5.0)
+	change_timer = randf_range(2.0, 5.0)
+
+
+func _release_target_reservation() -> void:
+	if is_instance_valid(target_vehicle):
+		if target_vehicle.has_method("release_ai_reservation"):
+			target_vehicle.call("release_ai_reservation", self)
+
+	target_vehicle = null
 
 
 func _find_vehicle() -> void:
+	if vehicle_cooldown > 0.0:
+		return
+
 	var nearest: Node3D = null
 	var nearest_distance := vehicle_search_distance
 
@@ -129,10 +137,13 @@ func _find_vehicle() -> void:
 
 		if not is_instance_valid(vehicle):
 			continue
-
 		if vehicle.get("driving") == true:
 			continue
 		if vehicle.get("ai_driving") == true:
+			continue
+		if vehicle.get("ai_reserved_by") != null:
+			continue
+		if not vehicle.has_method("reserve_ai_driver"):
 			continue
 
 		var distance := global_position.distance_to(vehicle.global_position)
@@ -144,7 +155,9 @@ func _find_vehicle() -> void:
 	if not is_instance_valid(nearest):
 		return
 
-	if not nearest.has_method("assign_ai_driver"):
+	var reserved: bool = nearest.call("reserve_ai_driver", self)
+
+	if not reserved:
 		return
 
 	target_vehicle = nearest
@@ -158,6 +171,8 @@ func _find_vehicle() -> void:
 
 func _physics_process(delta: float) -> void:
 	animation_time += delta
+	vehicle_cooldown = maxf(vehicle_cooldown - delta, 0.0)
+	obstacle_timer = maxf(obstacle_timer - delta, 0.0)
 
 	if state == NPCState.DRIVING:
 		_update_walking_animation(false)
@@ -186,8 +201,11 @@ func _update_wandering(delta: float) -> void:
 	if change_timer <= 0.0:
 		_choose_direction()
 
-		if randf() < 0.45:
+		if randf() < 0.22:
 			_find_vehicle()
+
+	if obstacle_timer <= 0.0:
+		_check_walking_obstacle()
 
 	velocity.x = move_toward(
 		velocity.x,
@@ -209,15 +227,50 @@ func _update_wandering(delta: float) -> void:
 		)
 
 
+func _check_walking_obstacle() -> void:
+	obstacle_timer = 0.45
+
+	if direction.length_squared() < 0.01:
+		return
+
+	var space_state := get_world_3d().direct_space_state
+	var start := global_position + Vector3.UP * 0.8
+	var finish := start + direction.normalized() * 2.0
+
+	var query := PhysicsRayQueryParameters3D.create(
+		start,
+		finish,
+		0xFFFFFFFF,
+		[get_rid()]
+	)
+
+	query.collide_with_areas = false
+	query.collide_with_bodies = true
+
+	var hit := space_state.intersect_ray(query)
+
+	if not hit.is_empty():
+		var normal: Vector3 = hit["normal"]
+		var tangent := direction.slide(normal)
+
+		if tangent.length_squared() > 0.01:
+			direction = tangent.normalized()
+		else:
+			_choose_direction()
+
+		change_timer = 1.5
+
+
 func _update_approaching(delta: float) -> void:
 	if not is_instance_valid(target_vehicle):
+		_release_target_reservation()
 		state = NPCState.WANDERING
 		_choose_direction()
 		return
 
 	if target_vehicle.get("driving") == true or target_vehicle.get("ai_driving") == true:
+		_release_target_reservation()
 		state = NPCState.WANDERING
-		target_vehicle = null
 		_choose_direction()
 		return
 
@@ -240,8 +293,8 @@ func _update_approaching(delta: float) -> void:
 		if accepted:
 			return
 
+		_release_target_reservation()
 		state = NPCState.WANDERING
-		target_vehicle = null
 		_choose_direction()
 		return
 
@@ -267,6 +320,8 @@ func _update_approaching(delta: float) -> void:
 
 
 func enter_vehicle(vehicle: Node3D) -> void:
+	_release_target_reservation()
+
 	current_vehicle = vehicle
 	target_vehicle = null
 	state = NPCState.DRIVING
@@ -288,6 +343,7 @@ func exit_vehicle(position_out: Vector3) -> void:
 	current_vehicle = null
 	target_vehicle = null
 	state = NPCState.WANDERING
+	vehicle_cooldown = 30.0
 	_choose_direction()
 
 
