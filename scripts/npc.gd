@@ -27,6 +27,8 @@ var target_vehicle: Node3D = null
 var current_vehicle: Node3D = null
 var approach_position := Vector3.ZERO
 
+const WORLD_LIMIT := 180.0
+
 
 func _ready() -> void:
 	add_to_group("npcs")
@@ -36,8 +38,9 @@ func _ready() -> void:
 
 
 func _build_collision() -> void:
-	# Отдельный слой NPC.
-	# Слой 1 остаётся для мира и обычных физических объектов.
+	# NPC находится на отдельном слое.
+	# Он взаимодействует с миром и транспортом,
+	# но не сталкивается с игроком и другими NPC.
 	collision_layer = 2
 	collision_mask = 1
 
@@ -203,6 +206,16 @@ func _physics_process(delta: float) -> void:
 func _update_wandering(delta: float) -> void:
 	change_timer -= delta
 
+	# Не даём NPC уйти за пределы игрового мира.
+	if absf(global_position.x) > WORLD_LIMIT or absf(global_position.z) > WORLD_LIMIT:
+		direction = Vector3(
+			-global_position.x,
+			0.0,
+			-global_position.z
+		).normalized()
+
+		change_timer = 2.5
+
 	if change_timer <= 0.0:
 		_choose_direction()
 
@@ -289,6 +302,9 @@ func _update_approaching(delta: float) -> void:
 			randf_range(-vehicle_drive_distance, vehicle_drive_distance)
 		)
 
+		destination.x = clampf(destination.x, -150.0, 150.0)
+		destination.z = clampf(destination.z, -150.0, 150.0)
+
 		var accepted: bool = target_vehicle.call(
 			"assign_ai_driver",
 			self,
@@ -341,7 +357,6 @@ func exit_vehicle(position_out: Vector3) -> void:
 	global_position = position_out
 	velocity = Vector3.ZERO
 
-	# Возвращаем NPC его собственный физический слой.
 	collision_layer = 2
 	collision_mask = 1
 	visible = true
