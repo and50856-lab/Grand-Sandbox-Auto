@@ -3,7 +3,7 @@ extends Control
 signal vector_changed(value: Vector2)
 
 @export var radius: float = 145.0
-@export var knob_radius: float = 58.0
+@export var knob_radius: float = 62.0
 
 var value: Vector2 = Vector2.ZERO
 var active_touch: int = -1
@@ -12,7 +12,18 @@ var knob_position: Vector2 = Vector2.ZERO
 
 
 func _ready() -> void:
-	custom_minimum_size = Vector2(320.0, 320.0)
+	custom_minimum_size = Vector2(340.0, 340.0)
+
+	anchor_left = 0.0
+	anchor_top = 1.0
+	anchor_right = 0.0
+	anchor_bottom = 1.0
+
+	offset_left = 28.0
+	offset_top = -360.0
+	offset_right = 368.0
+	offset_bottom = -20.0
+
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	queue_redraw()
 
@@ -69,11 +80,11 @@ func _reset_stick() -> void:
 func _draw() -> void:
 	var center := size * 0.5
 
-	# Внешняя площадка.
+	# Основная полупрозрачная площадка.
 	draw_circle(
 		center,
 		radius,
-		Color(0.035, 0.045, 0.065, 0.68)
+		Color(0.025, 0.04, 0.065, 0.76)
 	)
 
 	# Внешняя окантовка.
@@ -82,8 +93,8 @@ func _draw() -> void:
 		radius,
 		0.0,
 		TAU,
-		80,
-		Color(0.82, 0.88, 0.98, 0.75),
+		96,
+		Color(0.82, 0.90, 1.0, 0.82),
 		4.0
 	)
 
@@ -93,16 +104,23 @@ func _draw() -> void:
 		radius * 0.62,
 		0.0,
 		TAU,
-		64,
-		Color(0.65, 0.76, 0.92, 0.18),
+		72,
+		Color(0.65, 0.78, 0.95, 0.25),
 		2.0
 	)
 
-	# Ручка.
+	# Центральная отметка.
+	draw_circle(
+		center,
+		5.0,
+		Color(0.85, 0.92, 1.0, 0.28)
+	)
+
+	# Ручка стика.
 	draw_circle(
 		center + knob_position,
 		knob_radius,
-		Color(0.18, 0.52, 0.92, 0.95)
+		Color(0.13, 0.43, 0.82, 0.96)
 	)
 
 	draw_arc(
@@ -110,14 +128,14 @@ func _draw() -> void:
 		knob_radius,
 		0.0,
 		TAU,
-		56,
-		Color(0.94, 0.97, 1.0, 0.95),
-		3.0
+		64,
+		Color(0.94, 0.97, 1.0, 0.98),
+		3.5
 	)
 
-	# Небольшой блик в центре.
+	# Блик.
 	draw_circle(
-		center + knob_position,
-		knob_radius * 0.18,
-		Color(0.8, 0.91, 1.0, 0.22)
+		center + knob_position + Vector2(-knob_radius * 0.22, -knob_radius * 0.25),
+		knob_radius * 0.22,
+		Color(0.9, 0.96, 1.0, 0.22)
 	)
