@@ -16,6 +16,9 @@ var player: CharacterBody3D
 var joystick: Control
 var interact_button: Button
 var jump_button: Button
+var gas_button: Button
+var reverse_button: Button
+var reset_vehicle_button: Button
 
 var hud_layer: CanvasLayer
 var menu_layer: CanvasLayer
@@ -32,27 +35,28 @@ func _ready() -> void:
 
 
 func _process(_delta: float) -> void:
-	if not game_started:
-		return
-
-	if not is_instance_valid(player):
+	if not game_started or not is_instance_valid(player):
 		return
 
 	var in_vehicle: bool = player.get("in_vehicle") == true
 
 	if is_instance_valid(interact_button):
-		interact_button.text = (
-			"ВЫЙТИ ИЗ МАШИНЫ"
-			if in_vehicle
-			else "ВЗАИМОДЕЙСТВИЕ"
-		)
+		interact_button.text = "ВЫЙТИ ИЗ МАШИНЫ" if in_vehicle else "ВЗАИМОДЕЙСТВИЕ"
 
 	if is_instance_valid(status_label):
-		status_label.text = (
-			"В МАШИНЕ"
-			if in_vehicle
-			else "ПЕШЕХОД"
-		)
+		status_label.text = "В МАШИНЕ" if in_vehicle else "ПЕШЕХОД"
+
+	if is_instance_valid(jump_button):
+		jump_button.visible = not in_vehicle
+
+	if is_instance_valid(gas_button):
+		gas_button.visible = in_vehicle
+
+	if is_instance_valid(reverse_button):
+		reverse_button.visible = in_vehicle
+
+	if is_instance_valid(reset_vehicle_button):
+		reset_vehicle_button.visible = in_vehicle
 
 
 # ==================================================
@@ -67,16 +71,12 @@ func _show_main_menu() -> void:
 	add_child(menu_layer)
 
 	var background := ColorRect.new()
-	background.set_anchors_and_offsets_preset(
-		Control.PRESET_FULL_RECT
-	)
+	background.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	background.color = Color(0.025, 0.035, 0.055, 1.0)
 	menu_layer.add_child(background)
 
 	var center := CenterContainer.new()
-	center.set_anchors_and_offsets_preset(
-		Control.PRESET_FULL_RECT
-	)
+	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	menu_layer.add_child(center)
 
 	var panel := PanelContainer.new()
@@ -96,10 +96,7 @@ func _show_main_menu() -> void:
 	var subtitle := Label.new()
 	subtitle.text = "Открытый мир · Песочница"
 	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	subtitle.add_theme_color_override(
-		"font_color",
-		Color(0.65, 0.72, 0.82)
-	)
+	subtitle.add_theme_color_override("font_color", Color(0.65, 0.72, 0.82))
 	column.add_child(subtitle)
 
 	_add_menu_button(column, "ИГРАТЬ", _start_game)
@@ -117,7 +114,6 @@ func _add_menu_button(
 	button.custom_minimum_size = Vector2(0, 54)
 	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	button.pressed.connect(callback)
-
 	parent.add_child(button)
 
 
@@ -152,9 +148,8 @@ func _create_player() -> void:
 	player = CharacterBody3D.new()
 	player.name = "Player"
 	player.set_script(PLAYER_SCRIPT)
-
 	add_child(player)
-	player.global_position = Vector3(0, 1.5, 0)
+	player.global_position = Vector3(0.0, 1.5, 0.0)
 
 
 # ==================================================
@@ -167,11 +162,9 @@ func _create_world() -> void:
 
 	env.background_mode = Environment.BG_COLOR
 	env.background_color = Color(0.36, 0.56, 0.76)
-
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 	env.ambient_light_color = Color(0.65, 0.72, 0.85)
 	env.ambient_light_energy = 0.65
-
 	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
 
 	environment_node.environment = env
@@ -183,7 +176,6 @@ func _create_world() -> void:
 	sun.rotation_degrees = Vector3(-48, -35, 0)
 	sun.light_energy = 1.0
 	sun.shadow_enabled = Settings.shadow_quality > 0
-
 	add_child(sun)
 
 	_create_ground()
@@ -203,29 +195,20 @@ func _create_ground() -> void:
 	var visual := MeshInstance3D.new()
 	visual.mesh = mesh
 	visual.position.y = -0.5
-	visual.material_override = _make_material(
-		Color(0.19, 0.31, 0.18)
-	)
+	visual.material_override = _make_material(Color(0.19, 0.31, 0.18))
 	body.add_child(visual)
 
 	var collision := CollisionShape3D.new()
 	var shape := BoxShape3D.new()
-
 	shape.size = mesh.size
 	collision.shape = shape
 	collision.position.y = -0.5
-
 	body.add_child(collision)
 
 
 func _create_roads() -> void:
-	var road_material := _make_material(
-		Color(0.12, 0.13, 0.15)
-	)
-
-	var marking_material := _make_material(
-		Color(0.85, 0.78, 0.48)
-	)
+	var road_material := _make_material(Color(0.12, 0.13, 0.15))
+	var marking_material := _make_material(Color(0.85, 0.78, 0.48))
 
 	for i in range(-3, 4):
 		var offset := float(i) * BUILDING_SPACING
@@ -279,11 +262,7 @@ func _create_buildings() -> void:
 				float(z) * BUILDING_SPACING + 20.0
 			)
 
-			var height := (
-				10.0
-				+ float(abs(x * 7 + z * 3) % 4) * 3.0
-			)
-
+			var height := 10.0 + float(abs(x * 7 + z * 3) % 4) * 3.0
 			var material_index: int = int(abs(x + z)) % building_materials.size()
 
 			_add_building(
@@ -302,12 +281,7 @@ func _add_building(
 ) -> void:
 	var body := StaticBody3D.new()
 	body.name = building_name
-	body.position = position_value + Vector3(
-		0,
-		building_size.y * 0.5,
-		0
-	)
-
+	body.position = position_value + Vector3(0, building_size.y * 0.5, 0)
 	add_child(body)
 
 	var mesh := BoxMesh.new()
@@ -320,10 +294,8 @@ func _add_building(
 
 	var collision := CollisionShape3D.new()
 	var shape := BoxShape3D.new()
-
 	shape.size = building_size
 	collision.shape = shape
-
 	body.add_child(collision)
 
 
@@ -356,7 +328,6 @@ func _create_trees() -> void:
 
 			var px := float(x) * BUILDING_SPACING + 8.0
 			var pz := float(z) * BUILDING_SPACING + 8.0
-
 			var position_value := Vector3(px, 1.4, pz)
 
 			trunk_multi.set_instance_transform(
@@ -377,17 +348,13 @@ func _create_trees() -> void:
 	var trunk_instance := MultiMeshInstance3D.new()
 	trunk_instance.name = "TreeTrunks"
 	trunk_instance.multimesh = trunk_multi
-	trunk_instance.material_override = _make_material(
-		Color(0.28, 0.17, 0.10)
-	)
+	trunk_instance.material_override = _make_material(Color(0.28, 0.17, 0.10))
 	add_child(trunk_instance)
 
 	var crown_instance := MultiMeshInstance3D.new()
 	crown_instance.name = "TreeCrowns"
 	crown_instance.multimesh = crown_multi
-	crown_instance.material_override = _make_material(
-		Color(0.12, 0.34, 0.14)
-	)
+	crown_instance.material_override = _make_material(Color(0.12, 0.34, 0.14))
 	add_child(crown_instance)
 
 
@@ -407,7 +374,6 @@ func _create_vehicles() -> void:
 		var vehicle := RigidBody3D.new()
 		vehicle.name = "Vehicle_%d" % i
 		vehicle.set_script(VEHICLE_SCRIPT)
-
 		add_child(vehicle)
 		vehicle.global_position = positions[i]
 
@@ -419,20 +385,25 @@ func _create_vehicles() -> void:
 func _create_npcs() -> void:
 	var count: int = clampi(Settings.npc_amount, 0, 10)
 
+	var spawn_positions: Array[Vector3] = [
+		Vector3(0, 1.2, -84),
+		Vector3(84, 1.2, 0),
+		Vector3(0, 1.2, 84),
+		Vector3(-84, 1.2, 0),
+		Vector3(126, 1.2, 42),
+		Vector3(-126, 1.2, 42),
+		Vector3(42, 1.2, -126),
+		Vector3(-42, 1.2, -126),
+		Vector3(126, 1.2, -42),
+		Vector3(-126, 1.2, -42)
+	]
+
 	for i in range(count):
 		var npc := CharacterBody3D.new()
 		npc.name = "NPC_%d" % i
 		npc.set_script(NPC_SCRIPT)
-
 		add_child(npc)
-
-		var angle := TAU * float(i) / maxf(float(count), 1.0)
-
-		npc.global_position = Vector3(
-			cos(angle) * 16.0,
-			1.2,
-			sin(angle) * 16.0
-		)
+		npc.global_position = spawn_positions[i]
 
 
 # ==================================================
@@ -451,7 +422,6 @@ func _create_props() -> void:
 		var prop := RigidBody3D.new()
 		prop.name = "PhysicsProp_%d" % i
 		prop.set_script(PROP_SCRIPT)
-
 		add_child(prop)
 		prop.global_position = positions[i]
 
@@ -474,16 +444,13 @@ func _add_box_visual(
 	visual.mesh = mesh
 	visual.position = position_value
 	visual.material_override = material
-
 	add_child(visual)
 
 
 func _make_material(color: Color) -> StandardMaterial3D:
 	var material := StandardMaterial3D.new()
-
 	material.albedo_color = color
 	material.roughness = 0.9
-
 	return material
 
 
@@ -497,85 +464,171 @@ func _create_hud() -> void:
 	add_child(hud_layer)
 
 	var root := Control.new()
-	root.set_anchors_and_offsets_preset(
-		Control.PRESET_FULL_RECT
-	)
+	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	root.mouse_filter = Control.MOUSE_FILTER_PASS
 	hud_layer.add_child(root)
 
 	joystick = Control.new()
 	joystick.set_script(JOYSTICK_SCRIPT)
+	joystick.set("radius", 112.0)
+	joystick.set("knob_radius", 48.0)
 
 	joystick.anchor_left = 0.0
 	joystick.anchor_top = 1.0
 	joystick.anchor_right = 0.0
 	joystick.anchor_bottom = 1.0
-
-	joystick.offset_left = 35
-	joystick.offset_top = -205
-	joystick.offset_right = 215
-	joystick.offset_bottom = -25
+	joystick.offset_left = 35.0
+	joystick.offset_top = -315.0
+	joystick.offset_right = 275.0
+	joystick.offset_bottom = -35.0
 
 	root.add_child(joystick)
 
 	if joystick.has_signal("vector_changed"):
-		joystick.connect(
-			"vector_changed",
-			_on_joystick
-		)
-
-	var right_column := VBoxContainer.new()
-
-	right_column.anchor_left = 1.0
-	right_column.anchor_top = 1.0
-	right_column.anchor_right = 1.0
-	right_column.anchor_bottom = 1.0
-
-	right_column.offset_left = -190
-	right_column.offset_top = -250
-	right_column.offset_right = -25
-	right_column.offset_bottom = -25
-
-	right_column.add_theme_constant_override(
-		"separation",
-		10
-	)
-
-	root.add_child(right_column)
+		joystick.connect("vector_changed", _on_joystick)
 
 	jump_button = Button.new()
 	jump_button.text = "ПРЫЖОК"
-	jump_button.custom_minimum_size = Vector2(155, 55)
+	jump_button.custom_minimum_size = Vector2(150, 55)
+	jump_button.anchor_left = 1.0
+	jump_button.anchor_top = 1.0
+	jump_button.anchor_right = 1.0
+	jump_button.anchor_bottom = 1.0
+	jump_button.offset_left = -185
+	jump_button.offset_top = -250
+	jump_button.offset_right = -25
+	jump_button.offset_bottom = -190
 	jump_button.pressed.connect(_jump)
-	right_column.add_child(jump_button)
+	root.add_child(jump_button)
 
 	interact_button = Button.new()
 	interact_button.text = "ВЗАИМОДЕЙСТВИЕ"
-	interact_button.custom_minimum_size = Vector2(155, 55)
+	interact_button.custom_minimum_size = Vector2(160, 55)
+	interact_button.anchor_left = 1.0
+	interact_button.anchor_top = 1.0
+	interact_button.anchor_right = 1.0
+	interact_button.anchor_bottom = 1.0
+	interact_button.offset_left = -190
+	interact_button.offset_top = -175
+	interact_button.offset_right = -25
+	interact_button.offset_bottom = -115
 	interact_button.pressed.connect(_interact)
-	right_column.add_child(interact_button)
+	root.add_child(interact_button)
 
 	var menu_button := Button.new()
 	menu_button.text = "МЕНЮ"
-	menu_button.custom_minimum_size = Vector2(155, 50)
+	menu_button.custom_minimum_size = Vector2(130, 48)
+	menu_button.anchor_left = 1.0
+	menu_button.anchor_top = 0.0
+	menu_button.anchor_right = 1.0
+	menu_button.anchor_bottom = 0.0
+	menu_button.offset_left = -155
+	menu_button.offset_top = 20
+	menu_button.offset_right = -25
+	menu_button.offset_bottom = 70
 	menu_button.pressed.connect(_return_to_menu)
-	right_column.add_child(menu_button)
+	root.add_child(menu_button)
+
+	gas_button = Button.new()
+	gas_button.text = "ГАЗ"
+	gas_button.custom_minimum_size = Vector2(125, 85)
+	gas_button.anchor_left = 1.0
+	gas_button.anchor_top = 1.0
+	gas_button.anchor_right = 1.0
+	gas_button.anchor_bottom = 1.0
+	gas_button.offset_left = -295
+	gas_button.offset_top = -130
+	gas_button.offset_right = -165
+	gas_button.offset_bottom = -40
+	gas_button.button_down.connect(_set_car_gas)
+	gas_button.button_up.connect(_release_car_pedal)
+	root.add_child(gas_button)
+
+	reverse_button = Button.new()
+	reverse_button.text = "НАЗАД"
+	reverse_button.custom_minimum_size = Vector2(125, 85)
+	reverse_button.anchor_left = 1.0
+	reverse_button.anchor_top = 1.0
+	reverse_button.anchor_right = 1.0
+	reverse_button.anchor_bottom = 1.0
+	reverse_button.offset_left = -155
+	reverse_button.offset_top = -130
+	reverse_button.offset_right = -25
+	reverse_button.offset_bottom = -40
+	reverse_button.button_down.connect(_set_car_reverse)
+	reverse_button.button_up.connect(_release_car_pedal)
+	root.add_child(reverse_button)
+
+	reset_vehicle_button = Button.new()
+	reset_vehicle_button.text = "ПОСТАВИТЬ НА КОЛЁСА"
+	reset_vehicle_button.custom_minimum_size = Vector2(190, 48)
+	reset_vehicle_button.anchor_left = 1.0
+	reset_vehicle_button.anchor_top = 0.0
+	reset_vehicle_button.anchor_right = 1.0
+	reset_vehicle_button.anchor_bottom = 0.0
+	reset_vehicle_button.offset_left = -220
+	reset_vehicle_button.offset_top = 82
+	reset_vehicle_button.offset_right = -25
+	reset_vehicle_button.offset_bottom = 132
+	reset_vehicle_button.pressed.connect(_reset_vehicle)
+	root.add_child(reset_vehicle_button)
 
 	status_label = Label.new()
 	status_label.text = "ПЕШЕХОД"
 	status_label.position = Vector2(25, 20)
-	status_label.add_theme_font_size_override(
-		"font_size",
-		20
-	)
-
+	status_label.add_theme_font_size_override("font_size", 20)
 	root.add_child(status_label)
+
+	_update_hud_visibility(false)
+
+
+func _update_hud_visibility(in_vehicle: bool) -> void:
+	if is_instance_valid(jump_button):
+		jump_button.visible = not in_vehicle
+	if is_instance_valid(gas_button):
+		gas_button.visible = in_vehicle
+	if is_instance_valid(reverse_button):
+		reverse_button.visible = in_vehicle
+	if is_instance_valid(reset_vehicle_button):
+		reset_vehicle_button.visible = in_vehicle
 
 
 func _on_joystick(value: Vector2) -> void:
-	if is_instance_valid(player):
+	if not is_instance_valid(player):
+		return
+
+	if player.get("in_vehicle") == true:
+		var vehicle: Variant = player.get("current_vehicle")
+		if is_instance_valid(vehicle) and vehicle.has_method("set_mobile_steering"):
+			vehicle.call("set_mobile_steering", value.x)
+	else:
 		if player.has_method("set_touch_input"):
 			player.call("set_touch_input", value)
+
+
+func _set_car_gas() -> void:
+	_set_car_throttle(1.0)
+
+
+func _set_car_reverse() -> void:
+	_set_car_throttle(-1.0)
+
+
+func _release_car_pedal() -> void:
+	_set_car_throttle(0.0)
+
+
+func _set_car_throttle(value: float) -> void:
+	if not is_instance_valid(player):
+		return
+
+	if player.get("in_vehicle") != true:
+		return
+
+	var vehicle: Variant = player.get("current_vehicle")
+
+	if is_instance_valid(vehicle) and vehicle.has_method("set_mobile_throttle"):
+		vehicle.call("set_mobile_throttle", value)
 
 
 func _jump() -> void:
@@ -592,6 +645,19 @@ func _interact() -> void:
 
 	if player.has_method("interact"):
 		player.call("interact")
+
+
+func _reset_vehicle() -> void:
+	if not is_instance_valid(player):
+		return
+
+	if player.get("in_vehicle") != true:
+		return
+
+	var vehicle: Variant = player.get("current_vehicle")
+
+	if is_instance_valid(vehicle) and vehicle.has_method("reset_upright"):
+		vehicle.call("reset_upright")
 
 
 # ==================================================
@@ -614,31 +680,22 @@ func _return_to_menu() -> void:
 
 		if child is WorldEnvironment:
 			child.queue_free()
-
 		elif child is DirectionalLight3D:
 			child.queue_free()
-
 		elif child_name == "Ground":
 			child.queue_free()
-
 		elif child_name.begins_with("Road_"):
 			child.queue_free()
-
 		elif child_name.begins_with("Mark_"):
 			child.queue_free()
-
 		elif child_name.begins_with("Building_"):
 			child.queue_free()
-
 		elif child is MultiMeshInstance3D:
 			child.queue_free()
-
 		elif child_name.begins_with("Vehicle_"):
 			child.queue_free()
-
 		elif child_name.begins_with("NPC_"):
 			child.queue_free()
-
 		elif child_name.begins_with("PhysicsProp_"):
 			child.queue_free()
 
@@ -657,16 +714,12 @@ func _show_settings() -> void:
 	add_child(settings_layer)
 
 	var background := ColorRect.new()
-	background.set_anchors_and_offsets_preset(
-		Control.PRESET_FULL_RECT
-	)
+	background.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	background.color = Color(0.02, 0.025, 0.04, 0.96)
 	settings_layer.add_child(background)
 
 	var center := CenterContainer.new()
-	center.set_anchors_and_offsets_preset(
-		Control.PRESET_FULL_RECT
-	)
+	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	settings_layer.add_child(center)
 
 	var panel := PanelContainer.new()
@@ -731,17 +784,8 @@ func _show_settings() -> void:
 		_set_fps
 	)
 
-	_add_menu_button(
-		column,
-		"СОХРАНИТЬ",
-		_save_settings
-	)
-
-	_add_menu_button(
-		column,
-		"НАЗАД",
-		_close_settings
-	)
+	_add_menu_button(column, "СОХРАНИТЬ", _save_settings)
+	_add_menu_button(column, "НАЗАД", _close_settings)
 
 
 func _add_option(
@@ -763,10 +807,7 @@ func _add_option(
 	for item in options:
 		option.add_item(str(item))
 
-	option.select(
-		clampi(selected, 0, options.size() - 1)
-	)
-
+	option.select(clampi(selected, 0, options.size() - 1))
 	option.item_selected.connect(callback)
 	row.add_child(option)
 
@@ -782,26 +823,13 @@ func _set_shadows(index: int) -> void:
 
 
 func _set_distance(index: int) -> void:
-	var distances: Array[float] = [
-		80.0,
-		120.0,
-		180.0,
-		250.0
-	]
-
+	var distances: Array[float] = [80.0, 120.0, 180.0, 250.0]
 	Settings.view_distance = distances[index]
 	_apply_graphics_settings()
 
 
 func _set_npcs(index: int) -> void:
-	var amounts: Array[int] = [
-		0,
-		2,
-		4,
-		6,
-		10
-	]
-
+	var amounts: Array[int] = [0, 2, 4, 6, 10]
 	Settings.npc_amount = amounts[index]
 
 
@@ -811,47 +839,24 @@ func _set_physics(index: int) -> void:
 
 
 func _set_fps(index: int) -> void:
-	var values: Array[int] = [
-		30,
-		45,
-		60,
-		90,
-		120
-	]
-
+	var values: Array[int] = [30, 45, 60, 90, 120]
 	Settings.target_fps = values[index]
 	_apply_graphics_settings()
 
 
 func _distance_index() -> int:
-	var distances: Array[float] = [
-		80.0,
-		120.0,
-		180.0,
-		250.0
-	]
-
+	var distances: Array[float] = [80.0, 120.0, 180.0, 250.0]
 	var closest := 0
 
 	for i in range(distances.size()):
-		if absf(
-			Settings.view_distance - distances[i]
-		) < absf(
-			Settings.view_distance - distances[closest]
-		):
+		if absf(Settings.view_distance - distances[i]) < absf(Settings.view_distance - distances[closest]):
 			closest = i
 
 	return closest
 
 
 func _npc_index() -> int:
-	var amounts: Array[int] = [
-		0,
-		2,
-		4,
-		6,
-		10
-	]
+	var amounts: Array[int] = [0, 2, 4, 6, 10]
 
 	if amounts.has(Settings.npc_amount):
 		return amounts.find(Settings.npc_amount)
@@ -860,13 +865,7 @@ func _npc_index() -> int:
 
 
 func _fps_index() -> int:
-	var values: Array[int] = [
-		30,
-		45,
-		60,
-		90,
-		120
-	]
+	var values: Array[int] = [30, 45, 60, 90, 120]
 
 	if values.has(Settings.target_fps):
 		return values.find(Settings.target_fps)
