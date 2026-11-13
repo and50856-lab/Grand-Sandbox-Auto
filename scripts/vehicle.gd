@@ -81,6 +81,12 @@ func _ready() -> void:
 	_build_camera()
 
 
+func _process(_delta: float) -> void:
+	if camera_active and driving and is_instance_valid(driver):
+		if driver.get("current_vehicle") == self:
+			_update_camera_transform()
+
+
 func _build_body() -> void:
 	var collision := CollisionShape3D.new()
 	var shape := BoxShape3D.new()
@@ -173,6 +179,10 @@ func _build_camera() -> void:
 	vehicle_camera.near = 0.08
 	vehicle_camera.far = Settings.view_distance
 	add_child(vehicle_camera)
+
+	# Камера больше не наследует вращение и перемещение кузова.
+	vehicle_camera.top_level = true
+
 	_update_camera_transform()
 
 
@@ -183,22 +193,27 @@ func _update_camera_transform() -> void:
 	camera_pitch = clampf(camera_pitch, -0.55, 0.22)
 
 	var horizontal_distance := camera_distance * cos(camera_pitch)
-	var vertical_distance := camera_distance * sin(-camera_pitch)
+	var vertical_distance := camera_height + camera_distance * sin(-camera_pitch)
 
 	var offset := Vector3(
 		sin(camera_yaw) * horizontal_distance,
-		camera_height + vertical_distance,
+		vertical_distance,
 		cos(camera_yaw) * horizontal_distance
 	)
 
-	vehicle_camera.position = offset
-	vehicle_camera.look_at(Vector3(0.0, 1.0, 0.0), Vector3.UP)
+	# Камера располагается относительно конкретной машины,
+	# но её вращение остаётся независимым от кузова.
+	var camera_target := global_position + Vector3.UP * 1.0
+	vehicle_camera.global_position = camera_target + offset
+	vehicle_camera.look_at(camera_target, Vector3.UP)
 
 
 func rotate_vehicle_camera(movement: Vector2, sensitivity: float) -> void:
 	camera_yaw -= movement.x * sensitivity
 	camera_pitch -= movement.y * sensitivity
+
 	camera_pitch = clampf(camera_pitch, -0.55, 0.22)
+
 	_update_camera_transform()
 
 
@@ -232,6 +247,8 @@ func enter_vehicle(player: Node3D) -> void:
 
 	driver = player
 	driving = true
+	camera_active = true
+
 	mobile_steering = 0.0
 	mobile_throttle = 0.0
 	brake_timer = 0.0
@@ -239,14 +256,19 @@ func enter_vehicle(player: Node3D) -> void:
 	if driver.has_method("enter_vehicle"):
 		driver.call("enter_vehicle", self)
 
+	_update_camera_transform()
 	vehicle_camera.make_current()
 
 
 func exit_vehicle(player: Node3D) -> void:
 	if not driving or not is_instance_valid(player):
 		return
+	if player != driver:
+		return
 
 	driving = false
+	camera_active = false
+
 	mobile_steering = 0.0
 	mobile_throttle = 0.0
 	brake_timer = 0.0
@@ -338,6 +360,9 @@ func reset_upright() -> void:
 	sleeping = false
 	mobile_steering = 0.0
 	mobile_throttle = 0.0
+
+	if camera_active:
+		_update_camera_transform()
 
 
 func _get_player_controls() -> Vector2:
