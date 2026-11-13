@@ -2,8 +2,8 @@ extends Control
 
 signal vector_changed(value: Vector2)
 
-@export var radius: float = 76.0
-@export var knob_radius: float = 31.0
+@export var radius: float = 105.0
+@export var knob_radius: float = 43.0
 
 var value: Vector2 = Vector2.ZERO
 var active_touch: int = -1
@@ -12,7 +12,7 @@ var knob_position: Vector2 = Vector2.ZERO
 
 
 func _ready() -> void:
-	custom_minimum_size = Vector2(180, 180)
+	custom_minimum_size = Vector2(240.0, 240.0)
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	queue_redraw()
 
@@ -52,7 +52,7 @@ func _update_stick(pointer_position: Vector2) -> void:
 		offset = offset.normalized() * radius
 
 	knob_position = offset
-	value = offset / radius
+	value = (offset / radius).limit_length(1.0)
 
 	vector_changed.emit(value)
 	queue_redraw()
@@ -80,9 +80,9 @@ func _draw() -> void:
 		radius,
 		0.0,
 		TAU,
-		48,
+		64,
 		Color(0.8, 0.85, 0.95, 0.65),
-		3.0
+		4.0
 	)
 
 	draw_circle(
@@ -96,7 +96,7 @@ func _draw() -> void:
 		knob_radius,
 		0.0,
 		TAU,
-		32,
+		40,
 		Color.WHITE,
 		2.0
 	)
