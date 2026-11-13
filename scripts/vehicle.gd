@@ -9,10 +9,10 @@ extends RigidBody3D
 @export var brake_force: float = 14500.0
 
 @export_group("Suspension")
-@export var suspension_rest_length: float = 1.0
+@export var suspension_rest_length: float = 0.95
 @export var suspension_travel: float = 0.45
 @export var suspension_stiffness: float = 35000.0
-@export var suspension_damping: float = 4500.0
+@export var suspension_damping: float = 4800.0
 @export var wheel_radius: float = 0.43
 
 @export_group("Tyres")
@@ -24,28 +24,41 @@ extends RigidBody3D
 @export var steering_angle: float = 0.48
 @export var steering_response: float = 3.5
 
+@export_group("Stability")
+@export var upright_strength: float = 8500.0
+@export var upright_damping: float = 1800.0
+
 var driver: Node3D = null
 var driving: bool = false
 var ai_driving: bool = false
+var ai_reserved_by: Node3D = null
 
-var touch_input: Vector2 = Vector2.ZERO
+var mobile_steering: float = 0.0
+var mobile_throttle: float = 0.0
+var current_steering: float = 0.0
+
 var vehicle_camera: Camera3D
+var camera_yaw: float = 0.0
+var camera_pitch: float = -0.16
+var camera_distance: float = 8.0
+var camera_height: float = 3.5
 
 var wheel_nodes: Array[MeshInstance3D] = []
 var wheel_positions: Array[Vector3] = []
 var wheel_steering: Array[bool] = []
 
-var health: float = 100.0
 var brake_timer: float = 0.0
-var current_steering: float = 0.0
-
 var ai_driver: Node3D = null
 var ai_destination: Vector3 = Vector3.ZERO
 var ai_time_left: float = 0.0
+var ai_stuck_time: float = 0.0
+var ai_last_position: Vector3 = Vector3.ZERO
+var ai_steer_override: float = 0.0
+var ai_throttle_override: float = 0.0
 
-var engine_sound_speed: float = 0.0
+var camera_active: bool = false
 
-const COLLISION_MASK := 0xFFFFFFFF
+const COLLISION_MASK: int = 0xFFFFFFFF
 
 
 func _ready() -> void:
@@ -53,12 +66,15 @@ func _ready() -> void:
 
 	mass = 1150.0
 	gravity_scale = 1.0
-	linear_damp = 0.08
-	angular_damp = 0.8
+	linear_damp = 0.12
+	angular_damp = 2.2
 	can_sleep = false
 	continuous_cd = true
 	max_contacts_reported = 8
 	contact_monitor = true
+
+	center_of_mass_mode = RigidBody3D.CENTER_OF_MASS_MODE_CUSTOM
+	center_of_mass = Vector3(0.0, -0.38, 0.0)
 
 	_build_body()
 	_build_wheels()
@@ -147,19 +163,43 @@ func _build_wheels() -> void:
 
 			add_child(wheel)
 			wheel_nodes.append(wheel)
-
 			wheel_positions.append(Vector3(x, 0.43, z))
 			wheel_steering.append(z < 0.0)
 
 
 func _build_camera() -> void:
 	vehicle_camera = Camera3D.new()
-	vehicle_camera.position = Vector3(0.0, 4.0, 8.0)
-	vehicle_camera.rotation_degrees = Vector3(-15.0, 0.0, 0.0)
 	vehicle_camera.fov = 78.0
 	vehicle_camera.near = 0.08
 	vehicle_camera.far = Settings.view_distance
 	add_child(vehicle_camera)
+	_update_camera_transform()
+
+
+func _update_camera_transform() -> void:
+	if not is_instance_valid(vehicle_camera):
+		return
+
+	camera_pitch = clampf(camera_pitch, -0.55, 0.22)
+
+	var horizontal_distance := camera_distance * cos(camera_pitch)
+	var vertical_distance := camera_distance * sin(-camera_pitch)
+
+	var offset := Vector3(
+		sin(camera_yaw) * horizontal_distance,
+		camera_height + vertical_distance,
+		cos(camera_yaw) * horizontal_distance
+	)
+
+	vehicle_camera.position = offset
+	vehicle_camera.look_at(Vector3(0.0, 1.0, 0.0), Vector3.UP)
+
+
+func rotate_vehicle_camera(movement: Vector2, sensitivity: float) -> void:
+	camera_yaw -= movement.x * sensitivity
+	camera_pitch -= movement.y * sensitivity
+	camera_pitch = clampf(camera_pitch, -0.55, 0.22)
+	_update_camera_transform()
 
 
 func apply_settings() -> void:
@@ -167,8 +207,17 @@ func apply_settings() -> void:
 		vehicle_camera.far = Settings.view_distance
 
 
+func set_mobile_steering(value: float) -> void:
+	mobile_steering = clampf(value, -1.0, 1.0)
+
+
+func set_mobile_throttle(value: float) -> void:
+	mobile_throttle = clampf(value, -1.0, 1.0)
+
+
 func set_touch_input(value: Vector2) -> void:
-	touch_input = value.limit_length(1.0)
+	set_mobile_steering(value.x)
+	set_mobile_throttle(-value.y)
 
 
 func brake() -> void:
@@ -183,7 +232,9 @@ func enter_vehicle(player: Node3D) -> void:
 
 	driver = player
 	driving = true
-	touch_input = Vector2.ZERO
+	mobile_steering = 0.0
+	mobile_throttle = 0.0
+	brake_timer = 0.0
 
 	if driver.has_method("enter_vehicle"):
 		driver.call("enter_vehicle", self)
@@ -192,17 +243,16 @@ func enter_vehicle(player: Node3D) -> void:
 
 
 func exit_vehicle(player: Node3D) -> void:
-	if not driving:
-		return
-	if not is_instance_valid(player):
+	if not driving or not is_instance_valid(player):
 		return
 
 	driving = false
-	touch_input = Vector2.ZERO
+	mobile_steering = 0.0
+	mobile_throttle = 0.0
 	brake_timer = 0.0
 
 	var exit_position := global_position + global_transform.basis.x * 2.5
-	exit_position.y = 1.0
+	exit_position.y = maxf(exit_position.y, 1.0)
 
 	if player.has_method("exit_vehicle"):
 		player.call("exit_vehicle", exit_position)
@@ -210,13 +260,36 @@ func exit_vehicle(player: Node3D) -> void:
 	driver = null
 
 
+func reserve_ai_driver(npc: Node3D) -> bool:
+	if driving or ai_driving:
+		return false
+	if not is_instance_valid(npc):
+		return false
+	if is_instance_valid(ai_reserved_by) and ai_reserved_by != npc:
+		return false
+
+	ai_reserved_by = npc
+	return true
+
+
+func release_ai_reservation(npc: Node3D) -> void:
+	if ai_reserved_by == npc:
+		ai_reserved_by = null
+
+
 func assign_ai_driver(npc: Node3D, destination: Vector3) -> bool:
 	if driving or ai_driving or not is_instance_valid(npc):
 		return false
 
+	if is_instance_valid(ai_reserved_by) and ai_reserved_by != npc:
+		return false
+
+	ai_reserved_by = npc
 	ai_driver = npc
 	ai_destination = destination
 	ai_time_left = 35.0
+	ai_stuck_time = 0.0
+	ai_last_position = global_position
 	ai_driving = true
 
 	if npc.has_method("enter_vehicle"):
@@ -232,53 +305,106 @@ func release_ai_driver() -> void:
 	var old_driver := ai_driver
 	ai_driving = false
 	ai_driver = null
+	ai_reserved_by = null
 	ai_time_left = 0.0
+	ai_stuck_time = 0.0
 
 	if is_instance_valid(old_driver):
 		var exit_position := global_position + global_transform.basis.x * 2.5
-		exit_position.y = 1.0
+		exit_position.y = maxf(exit_position.y, 1.0)
 
 		if old_driver.has_method("exit_vehicle"):
 			old_driver.call("exit_vehicle", exit_position)
 
 
-func _get_controls() -> Vector2:
-	if driving:
-		var throttle := Input.get_axis("move_back", "move_forward")
-		var steering := Input.get_axis("move_left", "move_right")
+func reset_upright() -> void:
+	var current_position := global_position
+	current_position.y = maxf(current_position.y, 1.0)
+	global_position = current_position
 
-		if absf(touch_input.y) > 0.05:
-			throttle = -touch_input.y
+	var flat_forward := -global_transform.basis.z
+	flat_forward.y = 0.0
 
-		if absf(touch_input.x) > 0.05:
-			steering = touch_input.x
+	if flat_forward.length_squared() < 0.01:
+		flat_forward = Vector3.FORWARD
 
-		return Vector2(steering, throttle)
+	flat_forward = flat_forward.normalized()
 
-	if ai_driving:
-		var local_target := global_transform.basis.inverse() * (
-			ai_destination - global_position
-		)
+	var new_basis := Basis.looking_at(flat_forward, Vector3.UP)
+	global_transform = Transform3D(new_basis, global_position)
 
-		var distance := global_position.distance_to(ai_destination)
+	linear_velocity = Vector3.ZERO
+	angular_velocity = Vector3.ZERO
+	sleeping = false
+	mobile_steering = 0.0
+	mobile_throttle = 0.0
 
-		if distance < 7.0:
-			ai_time_left = 0.0
 
-		var steer := clampf(
-			local_target.x / maxf(absf(local_target.z), 2.0) * 2.0,
-			-1.0,
-			1.0
-		)
+func _get_player_controls() -> Vector2:
+	var steering := Input.get_axis("move_left", "move_right")
+	var throttle := Input.get_axis("move_back", "move_forward")
 
-		var throttle := 0.65
+	if absf(mobile_steering) > 0.04:
+		steering = mobile_steering
 
-		if local_target.z > 0.0:
-			throttle = -0.25
+	if absf(mobile_throttle) > 0.04:
+		throttle = mobile_throttle
 
-		return Vector2(steer, throttle)
+	return Vector2(steering, throttle)
 
-	return Vector2.ZERO
+
+func _get_ai_controls() -> Vector2:
+	var local_target := global_transform.basis.inverse() * (ai_destination - global_position)
+	var distance := global_position.distance_to(ai_destination)
+
+	if distance < 7.0:
+		ai_time_left = 0.0
+		return Vector2.ZERO
+
+	var desired_angle := atan2(local_target.x, -local_target.z)
+	var steer := clampf(desired_angle * 1.5, -1.0, 1.0)
+
+	var throttle := 0.65
+
+	if absf(desired_angle) > 1.3:
+		throttle = 0.18
+
+	if local_target.z > 0.0:
+		throttle = -0.3
+
+	var space_state := get_world_3d().direct_space_state
+	var forward := -global_transform.basis.z
+	var ray_start := global_position + Vector3.UP * 0.8
+	var ray_end := ray_start + forward * 5.0
+
+	var query := PhysicsRayQueryParameters3D.create(ray_start, ray_end, COLLISION_MASK, [get_rid()])
+	query.collide_with_areas = false
+	query.collide_with_bodies = true
+
+	var obstacle := space_state.intersect_ray(query)
+
+	if not obstacle.is_empty():
+		var normal: Vector3 = obstacle["normal"]
+		var side := global_transform.basis.x.dot(normal)
+
+		if absf(side) < 0.15:
+			steer = 1.0 if randf() > 0.5 else -1.0
+		else:
+			steer = signf(side)
+
+		throttle = -0.35
+
+	if global_position.distance_to(ai_last_position) < 0.5:
+		ai_stuck_time += get_physics_process_delta_time()
+	else:
+		ai_stuck_time = 0.0
+		ai_last_position = global_position
+
+	if ai_stuck_time > 3.0:
+		throttle = -0.55
+		steer = -1.0 if steer >= 0.0 else 1.0
+
+	return Vector2(steer, throttle)
 
 
 func _physics_process(delta: float) -> void:
@@ -287,11 +413,17 @@ func _physics_process(delta: float) -> void:
 		if ai_time_left <= 0.0:
 			release_ai_driver()
 
-	if not driving and not ai_driving:
-		if linear_velocity.length() < 0.15:
-			return
+	if not driving and not ai_driving and linear_velocity.length() < 0.15:
+		_apply_upright_stability()
+		return
 
-	var controls := _get_controls()
+	var controls := Vector2.ZERO
+
+	if driving:
+		controls = _get_player_controls()
+	elif ai_driving:
+		controls = _get_ai_controls()
+
 	var steering_input := controls.x
 	var throttle := controls.y
 
@@ -315,7 +447,14 @@ func _physics_process(delta: float) -> void:
 	var acceleration_force := 0.0
 
 	if absf(throttle) > 0.05:
-		if throttle > 0.0 and speed < max_speed:
+		var wants_opposite_direction := (
+			(speed > 1.5 and throttle < 0.0)
+			or (speed < -1.5 and throttle > 0.0)
+		)
+
+		if wants_opposite_direction:
+			braking = true
+		elif throttle > 0.0 and speed < max_speed:
 			acceleration_force = engine_force * throttle
 		elif throttle < 0.0 and speed > -reverse_speed:
 			acceleration_force = engine_force * throttle * 0.55
@@ -323,18 +462,13 @@ func _physics_process(delta: float) -> void:
 	var state := get_world_3d().direct_space_state
 	var up := global_transform.basis.y.normalized()
 
-	var total_normal_force := 0.0
-	var grounded_wheels := 0
-
 	for i in range(wheel_positions.size()):
 		var mount_local: Vector3 = wheel_positions[i]
 		var mount_global := global_transform * mount_local
 
 		var ray_start := mount_global
 		var ray_end := mount_global - up * (
-			suspension_rest_length
-			+ suspension_travel
-			+ wheel_radius
+			suspension_rest_length + suspension_travel + wheel_radius
 		)
 
 		var query := PhysicsRayQueryParameters3D.create(
@@ -348,7 +482,6 @@ func _physics_process(delta: float) -> void:
 		query.collide_with_bodies = true
 
 		var hit := state.intersect_ray(query)
-
 		var wheel := wheel_nodes[i]
 
 		if hit.is_empty():
@@ -359,16 +492,15 @@ func _physics_process(delta: float) -> void:
 			)
 			continue
 
-		grounded_wheels += 1
-
 		var hit_position: Vector3 = hit["position"]
-		var hit_normal: Vector3 = hit["normal"]
-
 		var distance := mount_global.distance_to(hit_position)
 		var suspension_length := distance - wheel_radius
 
-		var compression := suspension_rest_length - suspension_length
-		compression = clampf(compression, 0.0, suspension_travel)
+		var compression := clampf(
+			suspension_rest_length - suspension_length,
+			0.0,
+			suspension_travel
+		)
 
 		var offset := hit_position - global_position
 		var point_velocity := linear_velocity + angular_velocity.cross(offset)
@@ -379,12 +511,8 @@ func _physics_process(delta: float) -> void:
 			- suspension_velocity * suspension_damping
 		)
 
-		spring_force = maxf(spring_force, 0.0)
-
-		var normal_force := up * spring_force
-		apply_force(normal_force, offset)
-
-		total_normal_force += spring_force
+		spring_force = clampf(spring_force, 0.0, 52000.0)
+		apply_force(up * spring_force, offset)
 
 		var wheel_position_global := mount_global - up * suspension_length
 		wheel.position = to_local(wheel_position_global)
@@ -406,18 +534,15 @@ func _physics_process(delta: float) -> void:
 
 		var friction_limit := spring_force * tire_grip
 		var lateral_force_value := clampf(
-			-lateral_speed * mass * 1.8,
+			-lateral_speed * mass * lateral_grip,
 			-friction_limit,
 			friction_limit
 		)
 
-		var lateral_force := wheel_right * lateral_force_value
-		apply_force(lateral_force, offset)
+		apply_force(wheel_right * lateral_force_value, offset)
 
-		# Задний привод: двигатель действует на задние колёса.
 		if not wheel_steering[i] and absf(acceleration_force) > 0.0:
-			var drive_force := wheel_forward * acceleration_force * 0.5
-			apply_force(drive_force, offset)
+			apply_force(wheel_forward * acceleration_force * 0.5, offset)
 
 		if braking:
 			var brake_value := clampf(
@@ -427,7 +552,6 @@ func _physics_process(delta: float) -> void:
 			)
 			apply_force(wheel_forward * brake_value, offset)
 
-		# Сопротивление качению.
 		var rolling_force := (
 			-wheel_forward
 			* longitudinal_speed
@@ -439,23 +563,13 @@ func _physics_process(delta: float) -> void:
 		wheel.rotation.x -= longitudinal_speed * delta / maxf(wheel_radius, 0.1)
 		wheel.rotation.y = steer_angle
 
-	# Аэродинамическое сопротивление.
 	if linear_velocity.length() > 0.5:
-		var drag := -linear_velocity * linear_velocity.length() * 0.32
-		apply_central_force(drag)
+		apply_central_force(-linear_velocity * linear_velocity.length() * 0.32)
 
-	# Стабилизация кузова.
-	var local_angular := global_transform.basis.inverse() * angular_velocity
-	apply_torque(
-		global_transform.basis * Vector3(
-			-local_angular.x * 1800.0,
-			0.0,
-			-local_angular.z * 2200.0
-		)
-	)
+	_apply_upright_stability()
 
-	# Ограничение скорости без резкого обрыва движения.
 	var horizontal_velocity := Vector3(linear_velocity.x, 0.0, linear_velocity.z)
+
 	if horizontal_velocity.length() > max_speed + 5.0:
 		var limited := horizontal_velocity.normalized() * (max_speed + 5.0)
 		linear_velocity.x = limited.x
@@ -465,3 +579,16 @@ func _physics_process(delta: float) -> void:
 		AudioManager.set_engine_speed(absf(speed))
 	else:
 		AudioManager.stop_engine()
+
+
+func _apply_upright_stability() -> void:
+	var current_up := global_transform.basis.y.normalized()
+	var correction_axis := current_up.cross(Vector3.UP)
+
+	if correction_axis.length_squared() > 0.0001:
+		var local_angular := angular_velocity
+		var correction_torque := (
+			correction_axis * upright_strength
+			- local_angular * upright_damping
+		)
+		apply_torque(correction_torque)
