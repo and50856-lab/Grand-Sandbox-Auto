@@ -82,7 +82,7 @@ func _build_character() -> void:
 		Color(0.30, 0.30, 0.34)
 	]
 
-	var shirt := colors[rng.randi_range(0, colors.size() - 1)]
+	var shirt: Color = colors[rng.randi_range(0, colors.size() - 1)]
 	var pants := Color(0.12, 0.15, 0.20)
 	var skin := Color(0.78, 0.58, 0.42)
 
