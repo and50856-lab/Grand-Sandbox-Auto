@@ -36,6 +36,11 @@ func _ready() -> void:
 
 
 func _build_collision() -> void:
+	# Отдельный слой NPC.
+	# Слой 1 остаётся для мира и обычных физических объектов.
+	collision_layer = 2
+	collision_mask = 1
+
 	var collision := CollisionShape3D.new()
 	var shape := CapsuleShape3D.new()
 	shape.radius = 0.3
@@ -336,7 +341,8 @@ func exit_vehicle(position_out: Vector3) -> void:
 	global_position = position_out
 	velocity = Vector3.ZERO
 
-	collision_layer = 1
+	# Возвращаем NPC его собственный физический слой.
+	collision_layer = 2
 	collision_mask = 1
 	visible = true
 
