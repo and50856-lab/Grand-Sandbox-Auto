@@ -22,13 +22,20 @@ var last_touch: Vector2 = Vector2.ZERO
 var in_vehicle: bool = false
 var current_vehicle: Node3D = null
 
-var saved_collision_layer: int = 1
+var saved_collision_layer: int = 4
 var saved_collision_mask: int = 1
+
+var last_safe_position: Vector3 = Vector3(0.0, 1.5, 0.0)
 
 
 func _ready() -> void:
 	name = "Player"
 	add_to_group("player")
+
+	# Игрок находится на отдельном слое.
+	# NPC не смогут физически толкать персонажа.
+	collision_layer = 4
+	collision_mask = 1
 
 	saved_collision_layer = collision_layer
 	saved_collision_mask = collision_mask
@@ -138,14 +145,20 @@ func _build_camera() -> void:
 	camera_pivot.position.y = 1.35
 	add_child(camera_pivot)
 
+	var spring_arm := SpringArm3D.new()
+	spring_arm.spring_length = 6.0
+	spring_arm.margin = 0.2
+	spring_arm.collision_mask = 1
+	camera_pivot.add_child(spring_arm)
+
 	camera = Camera3D.new()
-	camera.position = Vector3(0.0, 2.2, 6.0)
+	camera.position = Vector3.ZERO
 	camera.fov = 75.0
 	camera.near = 0.08
 	camera.far = Settings.view_distance
-	camera.current = true
+	spring_arm.add_child(camera)
 
-	camera_pivot.add_child(camera)
+	camera.current = true
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -253,6 +266,22 @@ func _physics_process(delta: float) -> void:
 		velocity.z = move_toward(velocity.z, 0.0, acceleration * delta)
 
 	move_and_slide()
+
+	# Запоминаем последнюю нормальную позицию на земле.
+	if is_on_floor() and global_position.y > -5.0:
+		last_safe_position = global_position
+
+	# Защита от вылета в небо, падения сквозь карту
+	# и перемещения далеко за границы игрового мира.
+	if (
+		global_position.y < -15.0
+		or global_position.y > 80.0
+		or absf(global_position.x) > 205.0
+		or absf(global_position.z) > 205.0
+	):
+		global_position = last_safe_position
+		velocity = Vector3.ZERO
+		touch_move = Vector2.ZERO
 
 
 func interact() -> void:
