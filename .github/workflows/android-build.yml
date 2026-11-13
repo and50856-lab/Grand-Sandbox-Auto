@@ -64,6 +64,26 @@ jobs:
         run: |
           godot --headless --editor --path . --import
 
+      - name: Validate GDScript
+        shell: bash
+        run: |
+          set +e
+          godot --headless --editor --path . --quit 2>&1 | tee godot-validation.log
+          GODOT_EXIT=${PIPESTATUS[0]}
+          set -e
+
+          if [ "$GODOT_EXIT" -ne 0 ]; then
+            echo "Godot validation process failed."
+            exit "$GODOT_EXIT"
+          fi
+
+          if grep -E "SCRIPT ERROR|Parse Error|Failed to load script" godot-validation.log; then
+            echo "GDScript validation failed."
+            exit 1
+          fi
+
+          echo "GDScript validation passed."
+
       - name: Build Android APK
         run: |
           mkdir -p build
