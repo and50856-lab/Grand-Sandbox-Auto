@@ -343,6 +343,20 @@ func _create_trees() -> void:
 				)
 			)
 
+			# Отдельная физическая коллизия для ствола дерева.
+			# Визуальные деревья остаются в MultiMesh для быстрой отрисовки.
+			var tree_body := StaticBody3D.new()
+			tree_body.name = "TreeCollision_%d" % index
+			tree_body.position = position_value
+			add_child(tree_body)
+
+			var tree_collision := CollisionShape3D.new()
+			var tree_shape := CylinderShape3D.new()
+			tree_shape.radius = 0.32
+			tree_shape.height = 2.8
+			tree_collision.shape = tree_shape
+			tree_body.add_child(tree_collision)
+
 			index += 1
 
 	var trunk_instance := MultiMeshInstance3D.new()
@@ -385,17 +399,19 @@ func _create_vehicles() -> void:
 func _create_npcs() -> void:
 	var count: int = clampi(Settings.npc_amount, 0, 10)
 
+	# NPC появляются в центральной части города,
+	# чтобы быстро находить машины и не начинать жизнь на окраине карты.
 	var spawn_positions: Array[Vector3] = [
-		Vector3(0, 1.2, -84),
-		Vector3(84, 1.2, 0),
-		Vector3(0, 1.2, 84),
-		Vector3(-84, 1.2, 0),
-		Vector3(126, 1.2, 42),
-		Vector3(-126, 1.2, 42),
-		Vector3(42, 1.2, -126),
-		Vector3(-42, 1.2, -126),
-		Vector3(126, 1.2, -42),
-		Vector3(-126, 1.2, -42)
+		Vector3(0, 1.2, -24),
+		Vector3(24, 1.2, 0),
+		Vector3(0, 1.2, 24),
+		Vector3(-24, 1.2, 0),
+		Vector3(30, 1.2, 20),
+		Vector3(-30, 1.2, 20),
+		Vector3(20, 1.2, -30),
+		Vector3(-20, 1.2, -30),
+		Vector3(34, 1.2, -8),
+		Vector3(-34, 1.2, -8)
 	]
 
 	for i in range(count):
@@ -691,6 +707,8 @@ func _return_to_menu() -> void:
 		elif child_name.begins_with("Building_"):
 			child.queue_free()
 		elif child is MultiMeshInstance3D:
+			child.queue_free()
+		elif child_name.begins_with("TreeCollision_"):
 			child.queue_free()
 		elif child_name.begins_with("Vehicle_"):
 			child.queue_free()
